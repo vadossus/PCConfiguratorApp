@@ -1,0 +1,524 @@
+{
+  "metadata": {
+    "total_components": {
+      "cpus": 8,
+      "motherboards": 6,
+      "rams": 5,
+      "gpus": 6,
+      "storages": 4,
+      "psus": 4,
+      "cases": 3,
+      "coolers": 4
+    },
+    "items_per_page": 5
+  },
+  "components": {
+    "cpus": [
+      {
+        "id": 1,
+        "name": "AMD Ryzen 5 5600X",
+        "category": "cpu",
+        "price": 25000,
+        "image": "5600x.png",
+        "compatibility_flags": ["AM4", "DDR4"],
+        "critical_specs": ["6 ядер", "12 потоков", "3.7 ГГц"],
+        "socket": "AM4",
+        "wattage": 65
+      },
+      {
+        "id": 2,
+        "name": "Intel Core i5-12400F",
+        "category": "cpu", 
+        "price": 18000,
+        "image": "i5_12400f.jpg",
+        "compatibility_flags": ["LGA1700", "DDR4"],
+        "critical_specs": ["6 ядер", "12 потоков", "2.5 ГГц"],
+        "socket": "LGA1700",
+        "wattage": 65
+      },
+      {
+        "id": 3,
+        "name": "AMD Ryzen 7 5800X3D",
+        "category": "cpu",
+        "price": 35000,
+        "image": "5800x3d.jpg",
+        "compatibility_flags": ["AM4", "DDR4"],
+        "critical_specs": ["8 ядер", "16 потоков", "3.4 ГГц"],
+        "socket": "AM4", 
+        "wattage": 105
+      },
+      {
+        "id": 4,
+        "name": "Intel Core i7-12700K",
+        "category": "cpu",
+        "price": 32000,
+        "image": "12700k.jpg",
+        "compatibility_flags": ["LGA1700", "DDR5"],
+        "critical_specs": ["12 ядер", "20 потоков", "3.6 ГГц"],
+        "socket": "LGA1700",
+        "wattage": 125
+      },
+      {
+        "id": 5,
+        "name": "AMD Ryzen 5 7600X",
+        "category": "cpu",
+        "price": 28000,
+        "image": "7600x.png", 
+        "compatibility_flags": ["AM5", "DDR5"],
+        "critical_specs": ["6 ядер", "12 потоков", "4.7 ГГц"],
+        "socket": "AM5",
+        "wattage": 105
+      },
+      {
+        "id": 6,
+        "name": "Intel Core i9-13900K",
+        "category": "cpu",
+        "price": 45000,
+        "image": "13900k.png",
+        "compatibility_flags": ["LGA1700", "DDR5"],
+        "critical_specs": ["24 ядра", "32 потока", "3.0 ГГц"],
+        "socket": "LGA1700",
+        "wattage": 125
+      },
+      {
+        "id": 7,
+        "name": "AMD Ryzen 9 7950X",
+        "category": "cpu",
+        "price": 52000,
+        "image": "7950x.png",
+        "compatibility_flags": ["AM5", "DDR5"],
+        "critical_specs": ["16 ядер", "32 потока", "4.5 ГГц"],
+        "socket": "AM5",
+        "wattage": 170
+      },
+      {
+        "id": 8,
+        "name": "Intel Core i3-12100F",
+        "category": "cpu",
+        "price": 12000,
+        "image": "12100f.png",
+        "compatibility_flags": ["LGA1700", "DDR4"],
+        "critical_specs": ["4 ядра", "8 потоков", "3.3 ГГц"],
+        "socket": "LGA1700",
+        "wattage": 58
+      }
+    ],
+    "motherboards": [
+    {
+        "id": 1,
+        "name": "ASUS ROG Strix B550-F Gaming",
+        "category": "motherboard",
+        "price": 15000,
+        "image": "b550_f.png",
+        "compatibility_flags": ["AM4", "DDR4"],
+        "critical_specs": ["Socket AM4", "DDR4", "2 слота M.2", "6 портов SATA"],
+        "socket": "AM4",
+        "memoryType": "DDR4",
+        "formFactor": "ATX",
+        "memorySlots": 4,
+        "m2Slots": 2,
+        "sataPorts": 6,
+        "maxMemory": 128
+    },
+    {
+        "id": 2, 
+        "name": "Gigabyte B660M DS3H",
+        "category": "motherboard",
+        "price": 10000,
+        "image": "ds3h.png",
+        "compatibility_flags": ["LGA1700", "DDR4"],
+        "critical_specs": ["Socket LGA1700", "DDR4", "1 слот M.2", "4 порта SATA"],
+        "socket": "LGA1700",
+        "memoryType": "DDR4",
+        "formFactor": "Micro-ATX",
+        "memorySlots": 2,
+        "m2Slots": 1,
+        "sataPorts": 4,
+        "maxMemory": 64
+    },
+    {
+        "id": 3,
+        "name": "MSI MPG B650 Edge WiFi",
+        "category": "motherboard",
+        "price": 22000,
+        "image": "b650_edge.png",
+        "compatibility_flags": ["AM5", "DDR5"],
+        "critical_specs": ["Socket AM5", "DDR5", "3 слота M.2", "6 портов SATA"],
+        "socket": "AM5",
+        "memoryType": "DDR5",
+        "formFactor": "ATX",
+        "memorySlots": 4,
+        "m2Slots": 3,
+        "sataPorts": 6,
+        "maxMemory": 128
+    },
+    {
+        "id": 4,
+        "name": "ASRock B450M-HDV",
+        "category": "motherboard",
+        "price": 8000,
+        "image": "b450m-hdv.png",
+        "compatibility_flags": ["AM4", "DDR4"],
+        "critical_specs": ["Socket AM4", "DDR4", "1 слот M.2", "4 порта SATA"],
+        "socket": "AM4",
+        "memoryType": "DDR4",
+        "formFactor": "Micro-ATX",
+        "memorySlots": 2,
+        "m2Slots": 1,
+        "sataPorts": 4,
+        "maxMemory": 32
+    },
+    {
+        "id": 5,
+        "name": "ASUS TUF Gaming Z790-Plus",
+        "category": "motherboard",
+        "price": 28000,
+        "image": "z790_plus.jpg",
+        "compatibility_flags": ["LGA1700", "DDR5"],
+        "critical_specs": ["Socket LGA1700", "DDR5", "4 слота M.2", "6 портов SATA"],
+        "socket": "LGA1700",
+        "memoryType": "DDR5",
+        "formFactor": "ATX",
+        "memorySlots": 4,
+        "m2Slots": 4,
+        "sataPorts": 6,
+        "maxMemory": 128
+    },
+    {
+        "id": 6,
+        "name": "Gigabyte X670 AORUS Elite",
+        "category": "motherboard",
+        "price": 32000,
+        "image": "x670_aorus.jpg",
+        "compatibility_flags": ["AM5", "DDR5"],
+        "critical_specs": ["Socket AM5", "DDR5", "4 слота M.2", "8 портов SATA"],
+        "socket": "AM5",
+        "memoryType": "DDR5",
+        "formFactor": "ATX",
+        "memorySlots": 4,
+        "m2Slots": 4,
+        "sataPorts": 8,
+        "maxMemory": 128
+    }
+    ],
+    "rams": [
+      {
+        "id": 1,
+        "name": "Kingston Fury Beast 16GB (2x8GB) DDR4",
+        "category": "ram", 
+        "price": 6000,
+        "image": "fury_beast.png",
+        "compatibility_flags": ["DDR4"],
+        "critical_specs": ["16 ГБ", "DDR4", "3200 МГц"],
+        "type": "DDR4",
+        "speed": 3200,
+        "size": 16,
+        "modules": 2
+      },
+      {
+        "id": 2,
+        "name": "Corsair Vengeance RGB 32GB (2x16GB) DDR5",
+        "category": "ram",
+        "price": 12000,
+        "image": "corsair_vengeance.png",
+        "compatibility_flags": ["DDR5"],
+        "critical_specs": ["32 ГБ", "DDR5", "5600 МГц"], 
+        "type": "DDR5",
+        "speed": 5600,
+        "size": 32,
+        "modules": 2
+      },
+      {
+        "id": 3,
+        "name": "G.Skill Trident Z 16GB (2x8GB) DDR4",
+        "category": "ram",
+        "price": 7000,
+        "image": "trident_z.jpg",
+        "compatibility_flags": ["DDR4"],
+        "critical_specs": ["16 ГБ", "DDR4", "3600 МГц"],
+        "type": "DDR4",
+        "speed": 3600,
+        "size": 16,
+        "modules": 2
+      },
+      {
+        "id": 4,
+        "name": "Crucial Ballistix 32GB (2x16GB) DDR4",
+        "category": "ram",
+        "price": 9000,
+        "image": "ballistic_32.jpg",
+        "compatibility_flags": ["DDR4"],
+        "critical_specs": ["32 ГБ", "DDR4", "3200 МГц"],
+        "type": "DDR4",
+        "speed": 3200,
+        "size": 32,
+        "modules": 2
+      },
+      {
+        "id": 5,
+        "name": "Team Group T-Force Delta 64GB (2x32GB) DDR5",
+        "category": "ram",
+        "price": 18000,
+        "image": "delta_teamgroup.jpg",
+        "compatibility_flags": ["DDR5"],
+        "critical_specs": ["64 ГБ", "DDR5", "6000 МГц"],
+        "type": "DDR5",
+        "speed": 6000,
+        "size": 64,
+        "modules": 2
+      }
+    ],
+    "gpus": [
+      {
+        "id": 1,
+        "name": "NVIDIA GeForce RTX 3060 12GB",
+        "category": "gpu",
+        "price": 35000,
+        "image": "rtx_3060_asus.jpg",
+        "compatibility_flags": ["PCIe"],
+        "critical_specs": ["12 ГБ GDDR6", "PCIe 4.0"],
+        "wattage": 170,
+        "interface": "PCIe"
+      },
+      {
+        "id": 2,
+        "name": "AMD Radeon RX 6600 XT 8GB",
+        "category": "gpu", 
+        "price": 32000,
+        "image": "rx6600xt_powercolor.jpg",
+        "compatibility_flags": ["PCIe"],
+        "critical_specs": ["8 ГБ GDDR6", "PCIe 4.0"],
+        "wattage": 160,
+        "interface": "PCIe"
+      },
+      {
+        "id": 3,
+        "name": "NVIDIA GeForce RTX 4070 12GB",
+        "category": "gpu",
+        "price": 65000,
+        "image": "rtx4070_asus.jpg",
+        "compatibility_flags": ["PCIe"],
+        "critical_specs": ["12 ГБ GDDR6X", "PCIe 4.0"],
+        "wattage": 200,
+        "interface": "PCIe"
+      },
+      {
+        "id": 4,
+        "name": "AMD Radeon RX 7800 XT 16GB",
+        "category": "gpu",
+        "price": 58000,
+        "image": "rx7800xt_asus.jpg",
+        "compatibility_flags": ["PCIe"],
+        "critical_specs": ["16 ГБ GDDR6", "PCIe 4.0"],
+        "wattage": 263,
+        "interface": "PCIe"
+      },
+      {
+        "id": 5,
+        "name": "NVIDIA GeForce RTX 4060 Ti 8GB",
+        "category": "gpu",
+        "price": 45000,
+        "image": "4060_msi.png",
+        "compatibility_flags": ["PCIe"],
+        "critical_specs": ["8 ГБ GDDR6", "PCIe 4.0"],
+        "wattage": 160,
+        "interface": "PCIe"
+      },
+      {
+        "id": 6,
+        "name": "AMD Radeon RX 7600 8GB",
+        "category": "gpu",
+        "price": 28000,
+        "image": "rx7600_biostar.png",
+        "compatibility_flags": ["PCIe"],
+        "critical_specs": ["8 ГБ GDDR6", "PCIe 4.0"],
+        "wattage": 165,
+        "interface": "PCIe"
+      }
+    ],
+    "storages": [
+      {
+        "id": 1,
+        "name": "Samsung 980 1TB M.2 NVMe",
+        "category": "storage",
+        "price": 8000,
+        "image": "samsung980.jpg",
+        "compatibility_flags": ["M.2"],
+        "critical_specs": ["1 ТБ", "M.2 NVMe", "3500 МБ/с"],
+        "type": "M.2",
+        "capacity": 1000
+      },
+      {
+        "id": 2,
+        "name": "WD Blue 1TB HDD",
+        "category": "storage",
+        "price": 3000, 
+        "image": "wdblue1tb.jpg",
+        "compatibility_flags": ["SATA"],
+        "critical_specs": ["1 ТБ", "SATA III", "7200 об/мин"],
+        "type": "SATA",
+        "capacity": 2000
+      },
+      {
+        "id": 3,
+        "name": "Crucial P5 Plus 2TB M.2 NVMe",
+        "category": "storage",
+        "price": 12000,
+        "image": "crucialp5plus.jpg",
+        "compatibility_flags": ["M.2"],
+        "critical_specs": ["2 ТБ", "M.2 NVMe", "6600 МБ/с"],
+        "type": "M.2",
+        "capacity": 2000
+      },
+      { 
+        "id": 4,
+        "name": "Seagate BarraCuda 4TB HDD",
+        "category": "storage",
+        "price": 7000,
+        "image": "seagate_4tb.jpg",
+        "compatibility_flags": ["SATA"],
+        "critical_specs": ["4 ТБ", "SATA III", "5400 об/мин"],
+        "type": "SATA",
+        "capacity": 4000
+      }
+    ],
+    "psus": [
+      {
+        "id": 1,
+        "name": "Seasonic Focus GX-750",
+        "category": "psu",
+        "price": 9000,
+        "image": "seasonic_gx750.jpg",
+        "compatibility_flags": ["ATX"],
+        "critical_specs": ["750 Вт", "80+ Gold", "Полумодульный"],
+        "wattage": 750,
+        "efficiency": "80+ Gold",
+        "formFactor": "ATX"
+      },
+      {
+        "id": 2,
+        "name": "Corsair RM850x",
+        "category": "psu",
+        "price": 12000,
+        "image": "corsair_rm850x.jpg",
+        "compatibility_flags": ["ATX"],
+        "critical_specs": ["850 Вт", "80+ Gold", "Полностью модульный"],
+        "wattage": 850,
+        "efficiency": "80+ Gold",
+        "formFactor": "ATX"
+      },
+      {
+        "id": 3,
+        "name": "be quiet! Straight Power 11 650W",
+        "category": "psu",
+        "price": 8000,
+        "image": "bequiet_sp11.png",
+        "compatibility_flags": ["ATX"],
+        "critical_specs": ["650 Вт", "80+ Platinum", "Полностью модульный"],
+        "wattage": 650,
+        "efficiency": "80+ Platinum",
+        "formFactor": "ATX"
+      },
+      {
+        "id": 4,
+        "name": "Cooler Master MWE Gold 850",
+        "category": "psu",
+        "price": 9500,
+        "image": "coolermaster_mwe_gold.png",
+        "compatibility_flags": ["ATX"],
+        "critical_specs": ["850 Вт", "80+ Gold", "Полностью модульный"],
+        "wattage": 850,
+        "efficiency": "80+ Gold",
+        "formFactor": "ATX"
+      }
+    ],
+    "cases": [
+      {
+        "id": 1,
+        "name": "NZXT H510 Flow",
+        "category": "case", 
+        "price": 7000,
+        "image": "nzxt_h510_flow.jpg",
+        "compatibility_flags": ["ATX"],
+        "critical_specs": ["Mid-Tower", "ATX", "Tempered Glass"],
+        "formFactor": "ATX",
+        "supportedFormFactors": ["ATX", "Micro-ATX", "Mini-ITX"],
+        "maxGPULength": 360
+      },
+      {
+        "id": 2,
+        "name": "Lian Li PC-O11 Dynamic",
+        "category": "case",
+        "price": 12000,
+        "image": "lian_li_dynamic.jpg",
+        "compatibility_flags": ["ATX"],
+        "critical_specs": ["Mid-Tower", "ATX", "Двойное стекло"],
+        "formFactor": "ATX",
+        "supportedFormFactors": ["ATX", "Micro-ATX", "Mini-ITX", "E-ATX"],
+        "maxGPULength": 420
+      },
+      {
+        "id": 3,
+        "name": "Fractal Design Meshify C",
+        "category": "case",
+        "price": 8500,
+        "image": "fd_meshify.jpg",
+        "compatibility_flags": ["ATX"],
+        "critical_specs": ["Mid-Tower", "ATX", "Сетчатая передняя панель"],
+        "formFactor": "ATX",
+        "supportedFormFactors": ["ATX", "Micro-ATX", "Mini-ITX"],
+        "maxGPULength": 315
+      }
+    ],
+    "coolers": [
+    {
+        "id": 1,
+        "name": "Noctua NH-D15",
+        "category": "cooler",
+        "price": 8000,
+        "image": "noctua_nh_d15.jpg",
+        "compatibility_flags": ["Universal"],
+        "critical_specs": ["Воздушное охлаждение", "Две башни", "140mm вентиляторы"],
+        "type": "Air",
+        "socket": ["AM4", "AM5", "LGA1700", "LGA1200"],
+        "tdp": 250
+    },
+    {
+        "id": 2,
+        "name": "Corsair iCUE H150i Elite",
+        "category": "cooler", 
+        "price": 12000,
+        "image": "corsair_icue_h150i.jpg",
+        "compatibility_flags": ["Universal"],
+        "critical_specs": ["Жидкостное охлаждение", "360mm радиатор", "RGB"],
+        "type": "AIO",
+        "socket": ["AM4", "AM5", "LGA1700", "LGA1200"],
+        "tdp": 300
+    },
+    {
+        "id": 3,
+        "name": "be quiet! Dark Rock Pro 4",
+        "category": "cooler",
+        "price": 7000,
+        "image": "bq_darkrockpro4.jpg",
+        "compatibility_flags": ["Universal"],
+        "critical_specs": ["Воздушное охлаждение", "Две башни", "Тихое"],
+        "type": "Air",
+        "socket": ["AM4", "AM5", "LGA1700", "LGA1200"],
+        "tdp": 250
+    },
+    {
+        "id": 4,
+        "name": "Arctic Liquid Freezer II 240",
+        "category": "cooler",
+        "price": 6000,
+        "image": "arctic_liquid_freezer_2_240.jpg",
+        "compatibility_flags": ["Universal"],
+        "critical_specs": ["Жидкостное охлаждение", "240mm радиатор", "Эффективное"],
+        "type": "AIO",
+        "socket": ["AM4", "AM5", "LGA1700", "LGA1200"],
+        "tdp": 280
+    }
+    ]
+  }
+}
