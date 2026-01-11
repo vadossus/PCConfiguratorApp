@@ -46,13 +46,8 @@ function getCategoryName($componentType) {
 }
 
 
-function getFullComponentData($componentId, $componentType, $db) {
-    error_log("=== ПОИСК КОМПОНЕНТА ===");
-    error_log("ID: $componentId");
-    error_log("Тип: $componentType");
-    
+function getFullComponentData($componentId, $componentType, $db) {  
     if (!$componentId || !$componentType) {
-        error_log("Ошибка: нет ID или типа компонента");
         return null;
     }
     
@@ -71,15 +66,12 @@ function getFullComponentData($componentId, $componentType, $db) {
         $tableName = $tableMap[$componentType] ?? null;
         
         if (!$tableName) {
-            error_log("Ошибка: неизвестный тип компонента '$componentType'");
             return null;
         }
         
-        error_log("Ищем в таблице: $tableName");
         
         $checkTable = $db->query("SHOW TABLES LIKE '$tableName'");
         if ($checkTable->rowCount() === 0) {
-            error_log("Ошибка: таблица '$tableName' не существует!");
             return null;
         }
         
@@ -88,10 +80,8 @@ function getFullComponentData($componentId, $componentType, $db) {
         $checkStmt->execute([$componentId]);
         $count = $checkStmt->fetch(PDO::FETCH_ASSOC)['count'];
         
-        error_log("Найдено записей с ID $componentId: $count");
         
         if ($count == 0) {
-            error_log("Ошибка: компонент с ID $componentId не найден в таблице $tableName");
             return null;
         }
         
@@ -101,7 +91,6 @@ function getFullComponentData($componentId, $componentType, $db) {
         $component = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($component) {
-            error_log("Найден компонент: " . json_encode($component));
             $component['category_slug'] = $componentType;
             $component['category_name'] = getCategoryName($componentType);
             
@@ -122,12 +111,9 @@ function getFullComponentData($componentId, $componentType, $db) {
             return $component;
         }
         
-        error_log("Не удалось получить данные компонента");
         return null;
         
     } catch (Exception $e) {
-        error_log("Исключение при поиске компонента: " . $e->getMessage());
-        error_log("Trace: " . $e->getTraceAsString());
         return null;
     }
 }
@@ -193,14 +179,12 @@ if ($action === 'save') {
                     }
                 }
             } elseif (is_array($component)) {
-                // Сохраняем все данные, включая image если есть
                 $componentData = [
                     'id' => $component['id'] ?? 0,
                     'name' => $component['name'] ?? 'Компонент',
                     'price' => $component['price'] ?? 0
                 ];
                 
-                // Добавляем image если есть
                 if (isset($component['image'])) {
                     $componentData['image'] = $component['image'];
                 }
@@ -240,7 +224,6 @@ if ($action === 'save') {
 
     } catch (Exception $e) {
         $db->rollBack();
-        error_log("Ошибка сохранения сборки: " . $e->getMessage());
         http_response_code(500);
         echo json_encode([
             "success" => false, 
@@ -296,7 +279,6 @@ if ($action === 'delete') {
         
     } catch (Exception $e) {
         $db->rollBack();
-        error_log("Ошибка удаления сборки: " . $e->getMessage());
         http_response_code(500);
         echo json_encode([
             'success' => false, 
@@ -358,7 +340,6 @@ if ($action === 'get_component_single') {
         }
         
     } catch (Exception $e) {
-        error_log("Ошибка получения компонента: " . $e->getMessage());
         http_response_code(500);
         echo json_encode([
             'success' => false,
@@ -444,7 +425,6 @@ if ($action === 'get_builds') {
         ]);
         
     } catch (Exception $e) {
-        error_log("Ошибка получения сборок: " . $e->getMessage());
         http_response_code(500);
         echo json_encode([
             'success' => false,
@@ -535,7 +515,6 @@ if ($action === 'update') {
         
     } catch (Exception $e) {
         $db->rollBack();
-        error_log("Ошибка обновления сборки: " . $e->getMessage());
         http_response_code(500);
         echo json_encode([
             'success' => false, 
@@ -582,7 +561,6 @@ if ($action === 'stats') {
         ]);
         
     } catch (Exception $e) {
-        error_log("Ошибка получения статистики: " . $e->getMessage());
         http_response_code(500);
         echo json_encode([
             'success' => false, 

@@ -33,7 +33,6 @@
     100% { transform: rotate(360deg); }
 }
 
-/* Альтернативный стиль индикатора */
 .loader.pulse .loader-spinner {
     animation: pulse 1.5s ease-in-out infinite;
     border: none;

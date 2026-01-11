@@ -1,4 +1,4 @@
-/* ========== АДМИН-ПАНЕЛЬ PC CONFIGURATOR ========== */
+
 .admin-container {
     display: flex;
     min-height: calc(100vh - 100px);
@@ -7,7 +7,7 @@
     font-family: 'Inter', 'Segoe UI', sans-serif;
 }
 
-/* Сайдбар */
+
 .admin-sidebar {
     width: 220px;
     background: #ffffff;
@@ -119,7 +119,7 @@
     margin-top: 2px;
 }
 
-/* Основной контент */
+
 .admin-content {
     flex: 1;
     padding: 25px;
@@ -162,7 +162,7 @@
     gap: 10px;
 }
 
-/* Кнопки */
+
 .btn {
     padding: 10px 18px;
     border-radius: 6px;
@@ -214,7 +214,7 @@
     font-size: 14px;
 }
 
-/* Карточки статистики */
+
 .dashboard-stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -293,7 +293,7 @@
     color: #721c24;
 }
 
-/* Таблицы */
+
 .admin-table-container {
     background: white;
     border-radius: 10px;
@@ -353,7 +353,7 @@
     border-right: none;
 }
 
-/* Badges */
+
 .badge {
     padding: 4px 10px;
     border-radius: 4px;
@@ -382,7 +382,7 @@
     border: 1px solid #bee5eb;
 }
 
-/* Действия в таблицах */
+
 .table-actions {
     display: flex;
     gap: 6px;
@@ -413,7 +413,6 @@
 .btn-delete:hover { background: #dc3545; color: white; border-color: #dc3545; }
 .btn-disable:hover, .btn-enable:hover { background: #ffc107; color: white; border-color: #ffc107; }
 
-/* Формы и фильтры */
 .component-filter, .user-filter {
     display: flex;
     gap: 12px;
@@ -451,7 +450,6 @@
     color: #999;
 }
 
-/* Сетка сборок */
 .builds-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -526,7 +524,6 @@
     justify-content: center;
 }
 
-/* Активность */
 .recent-activity {
     background: white;
     border-radius: 10px;
@@ -552,7 +549,7 @@
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-/* Сама запись активности */
+
 .activity-item {
     display: flex;
     align-items: flex-start;
@@ -564,7 +561,7 @@
     border-bottom: none;
 }
 
-/* Иконка */
+
 .activity-icon {
     width: 40px;
     height: 40px;
@@ -578,7 +575,7 @@
     flex-shrink: 0;
 }
 
-/* Контент */
+
 .activity-content {
     flex: 1;
 }
@@ -606,7 +603,6 @@
     line-height: 1.4;
 }
 
-/* Кнопка "Показать еще" (генерируется твоим JS) */
 .load-more-activities {
     text-align: center;
     margin-top: 15px;
@@ -627,7 +623,7 @@
     color: #333;
 }
 
-/* Полоса прокрутки */
+
 ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -647,7 +643,7 @@
     background: #999;
 }
 
-/* Адаптивность */
+
 @media (max-width: 1200px) {
     .admin-sidebar {
         width: 200px;
@@ -776,7 +772,7 @@
     }
 }
 
-/* дополнительные стили для админки */
+
 .component-name-with-image {
     display: flex;
     align-items: center;
@@ -849,7 +845,6 @@
     padding: 3px;
 }
 
-/* модальные окна */
 .tabs {
     display: flex;
     border-bottom: 1px solid #ddd;
@@ -914,7 +909,6 @@
     border-top: 1px solid #eee;
 }
 
-/* Стили для импорта JSON */
 .upload-area {
     border: 2px dashed #ccc;
     border-radius: 10px;
@@ -1015,7 +1009,7 @@
     flex: 1;
 }
 
-/* Фильтры */
+
 .component-filter {
     display: flex;
     gap: 10px;
@@ -1040,7 +1034,7 @@
     min-width: 200px;
 }
 
-/* Таблица с компонентами */
+
 .component-info {
     display: flex;
     align-items: center;
@@ -1061,7 +1055,7 @@
     gap: 3px;
 }
 
-/* Статус */
+
 .status-badge {
     padding: 4px 8px;
     border-radius: 4px;
@@ -1079,7 +1073,7 @@
     color: #721c24;
 }
 
-/* Кнопки действий */
+
 .action-buttons {
     display: flex;
     gap: 5px;
@@ -1090,7 +1084,7 @@
     font-size: 12px;
 }
 
-/* Пагинация */
+
 .pagination {
     display: flex;
     gap: 5px;
@@ -1130,7 +1124,7 @@
     color: #6c757d;
 }
 
-/* Формы */
+
 .admin-form {
     display: flex;
     flex-direction: column;
@@ -1178,7 +1172,7 @@
     padding: 20px;
 }
 
-/* Карточка сборки */
+
 .build-card {
     background: white;
     border-radius: 12px;
@@ -1195,7 +1189,7 @@
     box-shadow: 0 6px 16px rgba(0,0,0,0.12);
 }
 
-/* Заголовок карточки */
+
 .build-card-header {
     display: flex;
     justify-content: space-between;
@@ -1219,7 +1213,7 @@
     font-size: 12px;
 }
 
-/* Иконки компонентов (КВАДРАТИКИ) */
+
 .build-preview-row {
     display: flex;
     justify-content: space-between;
@@ -1253,7 +1247,7 @@
     object-fit: contain;
 }
 
-/* Для реальных изображений продуктов */
+
 .mini-icon-slot.active .real-product-img {
     border-radius: 4px;
     object-fit: cover;
@@ -1261,7 +1255,7 @@
     height: 100%;
 }
 
-/* Для иконок категорий */
+
 .mini-icon-slot .category-icon {
     filter: brightness(0) invert(1);
     opacity: 0.9;
@@ -1279,7 +1273,7 @@
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
-/* Контент карточки */
+
 .build-card-content {
     margin-bottom: 20px;
 }
@@ -1311,7 +1305,6 @@
     display: inline-block;
 }
 
-/* Кнопки действий */
 .build-actions {
     display: flex;
     gap: 10px;
@@ -1332,7 +1325,7 @@
 }
 
 
-/* Грид для карточек */
+
 .builds-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
@@ -1340,7 +1333,7 @@
     margin-top: 20px;
 }
 
-/* Нет данных */
+
 .no-data {
     text-align: center;
     padding: 40px;
@@ -1351,7 +1344,7 @@
     border-radius: 8px;
 }
 
-/* Контейнер для иконок */
+
 .build-preview-row {
     display: flex;
     flex-wrap: wrap;
@@ -1361,7 +1354,7 @@
     align-items: center;
 }
 
-/* Если нет компонентов */
+
 .no-components {
     text-align: center;
     padding: 20px;
@@ -1372,7 +1365,7 @@
     margin-bottom: 15px;
 }
 
-/* Статистика в заголовке */
+
 .build-stats {
     display: flex;
     flex-direction: column;
@@ -1389,7 +1382,7 @@
     font-weight: 500;
 }
 
-/* Мини-иконки компонентов */
+
 .mini-icon-slot {
     width: 65px;
     height: 65px;
@@ -1419,7 +1412,7 @@
     padding: 5px;
 }
 
-/* Индикатор количества для накопителей */
+
 .storage-count {
     position: absolute;
     top: -5px;
@@ -1437,7 +1430,7 @@
     z-index: 2;
 }
 
-/* Для накопителей - специальный стиль */
+
 .mini-icon-slot.storage-slot {
     border-color: #4ecdc4;
 }
@@ -1446,7 +1439,7 @@
     padding: 8px;
 }
 
-/* Адаптивность */
+
 @media (max-width: 768px) {
     .mini-icon-slot {
         width: 50px;

@@ -28,7 +28,6 @@ try {
 $action = $_GET['action'] ?? '';
 $input = json_decode(file_get_contents('php://input'), true);
 
-error_log("Admin API Action: $action");
 
 switch($action) {
     case 'get_count':
@@ -404,7 +403,6 @@ function addComponent($pdo, $data) {
         ]);
         
     } catch(Exception $e) {
-        error_log("Ошибка добавления компонента: " . $e->getMessage() . "\n" . $e->getTraceAsString());
         echo json_encode(['success' => false, 'message' => 'Ошибка добавления компонента: ' . $e->getMessage()]);
     }
 }
@@ -579,7 +577,6 @@ function getComponent($pdo) {
         ]);
         
     } catch(Exception $e) {
-        error_log("Ошибка загрузки компонентов: " . $e->getMessage());
         echo json_encode([
             'success' => false, 
             'message' => 'Ошибка загрузки компонентов: ' . $e->getMessage(), 
@@ -648,7 +645,6 @@ function updateComponent($pdo, $data) {
         ]);
         
     } catch(Exception $e) {
-        error_log("Ошибка обновления компонента: " . $e->getMessage());
         echo json_encode(['success' => false, 'message' => 'Ошибка обновления компонента: ' . $e->getMessage()]);
     }
 }
@@ -746,7 +742,6 @@ function logActivity($pdo, $data) {
         ]);
         
     } catch(Exception $e) {
-        error_log("Ошибка логирования активности: " . $e->getMessage());
         echo json_encode(['success' => true]); 
     }
 }
@@ -807,7 +802,6 @@ function getActivities($pdo) {
         ]);
         
     } catch(Exception $e) {
-        error_log("Ошибка загрузки активности: " . $e->getMessage());
         echo json_encode([
             'success' => false, 
             'activities' => [], 
