@@ -346,9 +346,7 @@ class DataManager {
     validateCompatibility(currentBuild) {
         const errors = [];
         const warnings = [];
-        let compatibilityScore = 0;
-        let maxScore = 0;
-
+        
         const getComponentData = (comp) => {
             if (!comp) return null;
             return comp.component || comp;
@@ -365,24 +363,16 @@ class DataManager {
             { type: 'coolers', name: 'Охлаждение', required: false }
         ];
 
-        // Считаем выбранные компоненты
-        componentsToCheck.forEach(comp => {
+        const selectedCount = componentsToCheck.reduce((count, comp) => {
             const component = currentBuild[comp.type];
-            
             if (comp.isArray) {
-                if (Array.isArray(component) && component.length > 0) {
-                    maxScore++;
-                    compatibilityScore++;
-                }
+                return count + (Array.isArray(component) && component.length > 0 ? 1 : 0);
             } else {
-                if (component) {
-                    maxScore++;
-                    compatibilityScore++;
-                }
+                return count + (component ? 1 : 0);
             }
-        });
+        }, 0);
 
-        // Проверка совместимости CPU и материнской платы
+        
         if (currentBuild.cpus && currentBuild.motherboards) {
             const cpuData = getComponentData(currentBuild.cpus);
             const mbData = getComponentData(currentBuild.motherboards);
@@ -396,11 +386,9 @@ class DataManager {
                     component2: 'motherboards',
                     message: `Процессор ${cpuData.name} (сокет ${cpuSocket}) не совместим с материнской платой ${mbData.name} (сокет ${mbSocket})`
                 });
-                compatibilityScore--;
             }
         }
 
-        // Проверка совместимости RAM и материнской платы
         if (currentBuild.rams && currentBuild.motherboards) {
             const ramData = getComponentData(currentBuild.rams);
             const mbData = getComponentData(currentBuild.motherboards);
@@ -414,11 +402,9 @@ class DataManager {
                     component2: 'motherboards',
                     message: `Оперативная память ${ramData.name} (${ramType}) не совместима с материнской платой ${mbData.name} (${mbMemoryType})`
                 });
-                compatibilityScore--;
             }
         }
 
-        // Проверка совместимости корпуса и материнской платы
         if (currentBuild.cases && currentBuild.motherboards) {
             const caseData = getComponentData(currentBuild.cases);
             const mbData = getComponentData(currentBuild.motherboards);
@@ -432,11 +418,9 @@ class DataManager {
                     component2: 'cases',
                     message: `Материнская плата ${mbData.name} (${mbFormFactor}) не поместится в корпус ${caseData.name} (поддерживает: ${caseFormFactors.join(', ')})`
                 });
-                compatibilityScore--;
             }
         }
 
-        // Проверка M.2 накопителей
         if (currentBuild.storages && Array.isArray(currentBuild.storages)) {
             currentBuild.storages.forEach((storage) => {
                 const storageData = getComponentData(storage);
@@ -448,23 +432,20 @@ class DataManager {
                         component2: 'motherboards',
                         message: `Накопитель ${storageData.name} (M.2) требует слот M.2, но материнская плата ${mbData.name} не имеет слотов M.2`
                     });
-                    compatibilityScore--;
                 }
             });
         }
 
-        // Проверка мощности блока питания
         const totalWattage = this.calculateTotalWattage(currentBuild);
         if (currentBuild.psus) {
             const psuData = getComponentData(currentBuild.psus);
             if (psuData && totalWattage > psuData.wattage) {
                 warnings.push({
-                    message: `⚠️ Мощность блока питания ${psuData.wattage}W может быть недостаточной для системы (расчетная мощность: ${totalWattage}W)`
+                    message: `Мощность блока питания ${psuData.wattage}W может быть недостаточной для системы (расчетная мощность: ${totalWattage}W)`
                 });
             }
         }
 
-        // Проверка видеокарты в корпусе
         if (currentBuild.gpus && currentBuild.cases) {
             const gpuData = getComponentData(currentBuild.gpus);
             const caseData = getComponentData(currentBuild.cases);
@@ -493,20 +474,10 @@ class DataManager {
                     component2: 'cpus',
                     message: `Охлаждение ${coolerData.name} не совместимо с процессором ${cpuData.name} (сокет ${cpuSocket})`
                 });
-                compatibilityScore--;
             }
         }
 
-        const selectedCount = componentsToCheck.reduce((count, comp) => {
-            const component = currentBuild[comp.type];
-            if (comp.isArray) {
-                return count + (Array.isArray(component) && component.length > 0 ? 1 : 0);
-            } else {
-                return count + (component ? 1 : 0);
-            }
-        }, 0);
-
-        const progress = maxScore > 0 ? Math.max(0, (compatibilityScore / maxScore) * 100) : 0;
+        const progress = (selectedCount / componentsToCheck.length) * 100;
 
         return {
             isValid: errors.length === 0,

@@ -157,7 +157,6 @@ class ModalManager {
         const modalBody = document.getElementById('modal-body');
     
         if (!Array.isArray(components)) {
-            console.error('Components is not an array!', components);
             components = [];
         }
         

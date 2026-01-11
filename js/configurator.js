@@ -719,7 +719,7 @@ class Configurator {
         compatibilityCount.textContent = `${selectedCount}/${totalCount}`;
         progressBar.style.width = `${progress}%`;
         
-        if (progress === 100 && this.compatibilityStatus.isValid) {
+        if (progress === 100 && this.compatibilityStatus.isValid && !this.compatibilityStatus.hasWarnings) {
             progressBar.style.background = 'linear-gradient(90deg, #28a745, #20c997)';
         } else if (progress >= 50) {
             progressBar.style.background = 'linear-gradient(90deg, #ffc107, #fd7e14)';
