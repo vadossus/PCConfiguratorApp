@@ -85,16 +85,18 @@ class Configurator {
 
     updateTotalPriceDisplay() {
         const totalPrice = this.calculateTotalPrice();
-        const totalPriceElement = document.getElementById('total-price');
         
-        if (totalPriceElement) {
-            totalPriceElement.textContent = this.formatPrice(totalPrice) + ' ₽';
-        }
+        const totalPriceElements = [
+            document.getElementById('total-price'),
+            document.getElementById('build-price'),
+            document.getElementById('total-price-display') 
+        ];
         
-        const buildPriceElement = document.getElementById('build-price');
-        if (buildPriceElement) {
-            buildPriceElement.textContent = this.formatPrice(totalPrice) + ' ₽';
-        }
+        totalPriceElements.forEach(element => {
+            if (element) {
+                element.textContent = this.formatPrice(totalPrice) + ' ₽';
+            }
+        });
     }
 
     initFavoritesModal() {
@@ -332,6 +334,10 @@ class Configurator {
         if (!realComponent) {
             this.showMessage('Ошибка: неверный формат данных компонента', 'error');
             return;
+        }
+        else
+        {
+            realComponent.price = Number(realComponent.price) || 0;
         }
         
         
@@ -764,14 +770,21 @@ class Configurator {
 
     calculateTotalPrice() {
         let total = 0;
-        
+    
         Object.values(this.currentBuild).forEach(component => {
             if (Array.isArray(component)) {
                 component.forEach(item => {
-                    total += item.price || 0;
+                    const itemData = item.component || item;
+                    if (itemData && itemData.price) {
+                        total += Number(itemData.price);
+                    }
                 });
-            } else if (component && component.price) {
-                total += component.price;
+            } else if (component) {
+                const compData = component.component || component;
+                
+                if (compData.price !== undefined && compData.price !== null) {
+                    total += Number(compData.price);
+                }
             }
         });
         
@@ -1054,7 +1067,7 @@ class Configurator {
         
         if (hasComponent) {
             const name = component.name || 'Без названия';
-            const price = component.price ? `${this.formatPrice(component.price)} ₽` : 'Цена не указана';
+            const price = component.price ? `${this.formatPrice(component.price)} ₽` : '0 ₽';
             
             let specs = 'Характеристики не указаны';
             if (component.critical_specs) {
@@ -1267,9 +1280,18 @@ class Configurator {
                 this.renderFavorites(data.builds);
             } else {
                 grid.innerHTML = `
-                    <div class="no-data">
-                        <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 10px;">
-                        <p>У вас пока нет сохраненных сборок.</p>
+                    <div class="no-data" style="
+                        grid-column: 1 / -1; 
+                        display: flex; 
+                        flex-direction: column; 
+                        align-items: center; 
+                        justify-content: center; 
+                        text-align: center; 
+                        padding: 40px 20px; 
+                        width: 100%;
+                    ">
+                        <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 15px;">
+                        <p style="margin-bottom: 20px; font-size: 1.1rem; color: #666;">У вас пока нет сохраненных сборок.</p>
                         <button class="btn btn-primary" onclick="document.getElementById('favorites-modal').classList.add('hidden')">
                             Создать первую сборку
                         </button>
@@ -1583,15 +1605,15 @@ class Configurator {
         return {
             id: component.id,
             name: component.name || 'Компонент',
-            price: component.price || 0,
+            price: Number(component.price) || 0, 
             category: componentType.slice(0, -1), 
             image: component.image || '',
             socket: component.socket || '',
             memory_type: component.memory_type || '',
-            wattage: component.wattage || 0,
-            capacity: component.capacity || 0,
+            wattage: Number(component.wattage) || 0, 
+            capacity: Number(component.capacity) || 0,
             speed: component.speed || '',
-            tdp: component.tdp || 0,
+            tdp: Number(component.tdp) || 0,
             type: component.type || '',
             
             critical_specs: this.parseJSONField(component.critical_specs, []),
@@ -1834,7 +1856,9 @@ class Configurator {
     
     formatPrice(price) {
         if (!price && price !== 0) return '0';
-        return new Intl.NumberFormat('ru-RU').format(price);
+        const num = Number(price);
+        if (isNaN(num)) return '0';
+        return new Intl.NumberFormat('ru-RU').format(num);
     }
 
     updateSaveButtonState() {
