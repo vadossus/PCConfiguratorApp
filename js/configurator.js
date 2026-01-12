@@ -883,23 +883,24 @@ class Configurator {
 
     calculatePowerConsumption() {
         let totalPower = 0;
+        let power12vPSU = 0; 
         const build = this.currentBuild;
         
         let detailsHTML = '';
         let hasComponents = false;
         
-    
         const defaultWattages = {
-            cpus: 65,       
-            gpus: 150,      
-            motherboards: 50, 
-            rams: 5,        
-            coolers: 8,     
-            cases: 10,      
-            psus: 0,        
-            storages: 5     
+            cpus: 65,
+            gpus: 150,
+            motherboards: 50,
+            rams: 5,
+            coolers: 8,
+            cases: 10,
+            psus: 0,
+            storages: 5
         };
         
+ 
         if (build.cpus) {
             hasComponents = true;
             let cpuPower = parseInt(build.cpus.wattage) || defaultWattages.cpus;
@@ -914,7 +915,6 @@ class Configurator {
             detailsHTML += `<div class="power-item"><span>Видеокарта</span> <span>${gpuPower} W</span></div>`;
         }
         
-
         if (build.motherboards) {
             hasComponents = true;
             let mbPower = parseInt(build.motherboards.wattage);
@@ -928,7 +928,7 @@ class Configurator {
             let ramPower = parseInt(build.rams.wattage);
             if (isNaN(ramPower) || ramPower <= 0) ramPower = defaultWattages.rams;
             totalPower += ramPower;
-            detailsHTML += `<div class="power-item"><span>Оперативная память</span> <span>${ramPower} W</span></div>`;
+            detailsHTML += `<div class="power-item"><span>ОЗУ</span> <span>${ramPower} W</span></div>`;
         }
         
         if (Array.isArray(build.storages) && build.storages.length > 0) {
@@ -945,7 +945,7 @@ class Configurator {
             let coolerPower = parseInt(build.coolers.wattage);
             if (isNaN(coolerPower) || coolerPower <= 0) coolerPower = defaultWattages.coolers;
             totalPower += coolerPower;
-            detailsHTML += `<div class="power-item"><span>Кулер процессора</span> <span>${coolerPower} W</span></div>`;
+            detailsHTML += `<div class="power-item"><span>Охлаждение</span> <span>${coolerPower} W</span></div>`;
         }
         
         if (build.cases) {
@@ -955,26 +955,30 @@ class Configurator {
             totalPower += casePower;
             detailsHTML += `<div class="power-item"><span>Корпус</span> <span>${casePower} W</span></div>`;
         }
-        
+             
         if (build.psus) {
-            hasComponents = true;
-            let psuWattage = parseInt(build.psus.wattage) || 0;
-            if (psuWattage > 0) {
-                detailsHTML += `<div class="power-item"><span>Блок питания</span> <span>${psuWattage} W</span></div>`;
-            }
+            const psuWattage = parseInt(build.psus.wattage) || 0;
+            power12vPSU = Math.round(psuWattage * 0.8); 
+            detailsHTML += `<div class="power-item"><span>Блок питания (общая)</span> <span>${psuWattage} W</span></div>`;
+            detailsHTML += `<div class="power-item"><span>Линия 12V блока питания</span> <span>${power12vPSU} W</span></div>`;
         }
-        
+
         const overclockCheckbox = document.getElementById('overclock-check');
+        let overclockPower = 0;
         if (overclockCheckbox && overclockCheckbox.checked && hasComponents) {
             let cpuPower = build.cpus ? (parseInt(build.cpus.wattage) || defaultWattages.cpus) : 0;
             let gpuPower = build.gpus ? (parseInt(build.gpus.wattage) || defaultWattages.gpus) : 0;
-            let overclockPower = Math.ceil((cpuPower + gpuPower) * 0.20);
+            overclockPower = Math.ceil((cpuPower + gpuPower) * 0.20);
             
             if (overclockPower > 0) {
                 totalPower += overclockPower;
                 detailsHTML += `<div class="power-item" style="color: #ff9800"><span>Разгон (+20%)</span> <span>+${overclockPower} W</span></div>`;
             }
         }
+        
+        const power12vRequired = Math.round(totalPower * 0.85);
+        
+        const powerReserve = power12vPSU - power12vRequired;
         
         const wattageElement = document.getElementById('total-wattage');
         if (wattageElement) {
@@ -987,20 +991,10 @@ class Configurator {
                 breakdownList.innerHTML = `<div class="no-components">Выберите компоненты для расчета</div>`;
             } else {
                 detailsHTML += `<div class="power-divider"></div>`;
-                detailsHTML += `<div class="power-item total"><span>Итого потребление</span> <span>${totalPower} W</span></div>`;
-                const recommendedPower = Math.ceil(totalPower * 1.2);
-                detailsHTML += `<div class="power-item recommendation"><span>Рекомендуемый БП</span> <span>от ${recommendedPower} W</span></div>`;
-                if (build.psus) {
-                    const psuWattage = parseInt(build.psus.wattage) || 0;
-                    if (psuWattage > 0) {
-                        if (psuWattage < totalPower) {
-                            detailsHTML += `<div class="power-item warning"><span>Выбранный БП (${psuWattage}W) маловат</span></div>`;
-                        } else if (psuWattage >= recommendedPower) {
-                            detailsHTML += `<div class="power-item ok"><span>Выбранный БП (${psuWattage}W) подходит</span></div>`;
-                        } else {
-                            detailsHTML += `<div class="power-item warning"><span>Выбранный БП (${psuWattage}W) без запаса</span></div>`;
-                        }
-                    }
+                detailsHTML += `<div class="power-item total"><span>Общее потребление</span> <span>${totalPower} W</span></div>`;               
+                if (build.psus && power12vPSU > 0) {
+                    detailsHTML += `<div class="power-divider"></div>`;
+                    detailsHTML += `<div class="power-item"><span>Запас мощности по 12V</span> <span>${powerReserve} W</span></div>`;   
                 }
                 
                 breakdownList.innerHTML = detailsHTML;

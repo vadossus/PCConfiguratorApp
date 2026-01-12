@@ -885,7 +885,7 @@ class AdminPanel {
                             <input type="text" name="image" value="${this.escapeHtml(component.image || '')}" 
                                 placeholder="URL или имя файла">
                             <small class="form-text">
-                                Введите URL (начинается с http:// или https://) или имя файла из папки source/категория/
+                                Введите URL или из папки source/категория/
                             </small>
                         </div>
                         
@@ -901,6 +901,7 @@ class AdminPanel {
                             </div>
                         </div>
                         
+
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Мощность (Вт):</label>
@@ -1173,7 +1174,7 @@ class AdminPanel {
                             <div class="form-group">
                                 <label>Изображение:</label>
                                 <input type="text" name="image" 
-                                    placeholder="URL (https://...) или имя файла (например: cpu_amd.png)">
+                                    placeholder="URL (ссылкой) или имя файла (пример: cpu_amd.png)">
                                 <small class="form-text">
                                     Можно указать URL или имя файла из папки source/категория/
                                 </small>
@@ -1204,7 +1205,7 @@ class AdminPanel {
                                     <input type="number" name="capacity" min="0">
                                 </div>
                             </div>
-                            
+                       
                             <div class="form-group">
                                 <label>Критические характеристики (JSON массив):</label>
                                 <textarea name="critical_specs" placeholder='["6 ядер", "12 потоков", "3.7 ГГц"]' rows="3"></textarea>

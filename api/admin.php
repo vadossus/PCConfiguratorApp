@@ -184,7 +184,6 @@ function getUsers($pdo) {
         
         $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // Преобразуем даты
         foreach($users as &$user) {
             if (isset($user['created_at'])) {
                 $user['created_at'] = date('Y-m-d H:i:s', strtotime($user['created_at']));
@@ -347,7 +346,7 @@ function addComponent($pdo, $data) {
         }
         
         $basicFields = [
-            'description', 'socket', 'memory_type', 'form_factor', 
+            'description', 'socket', 'memory_type', 'form_factor',
             'wattage', 'efficiency', 'capacity', 'speed', 'tdp', 'type'
         ];
         
@@ -603,7 +602,7 @@ function updateComponent($pdo, $data) {
         $updateData = [];
         $allowedFields = [
             'name', 'description', 'price', 'image', 'socket', 'memory_type',
-            'form_factor', 'wattage', 'efficiency', 'capacity', 'speed', 'tdp', 'type',
+            'form_factor','wattage', 'efficiency', 'capacity', 'speed', 'tdp', 'type',
             'specs', 'compatibility_flags', 'critical_specs', 'is_active'
         ];
         
