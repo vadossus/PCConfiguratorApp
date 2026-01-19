@@ -24,7 +24,7 @@ class PCConfiguratorApp {
         this.configurator.renderComponentCards();
         this.configurator.updateCompatibilityStatus();
             
-        this.hideSplashScreen();
+        this.hide_splash();
         this.bindGlobalEvents();
         this.init_hero_animation();    
     }
@@ -98,7 +98,7 @@ class PCConfiguratorApp {
         document.body.appendChild(splash);
     }
 
-    hideSplashScreen() {
+    hide_splash() {
         const splash = document.getElementById('splash-screen');
         if (splash) {
             splash.style.opacity = '0';

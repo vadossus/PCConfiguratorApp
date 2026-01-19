@@ -30,13 +30,13 @@ class ModalManager {
         
         if (closeButton) {
             closeButton.addEventListener('click', () => {
-                this.hideComponentModal();
+                this.hide_component_modal();
             });
         }
         
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
-                this.hideComponentModal();
+                this.hide_component_modal();
             }
         });
     }
@@ -115,7 +115,6 @@ class ModalManager {
             const pageData = await this.dataManager.getComponentsPage(componentType, page, filters);
             
             if (!pageData) {
-                this.renderError('Нет данных от сервера');
                 return;
             }
             
@@ -149,7 +148,7 @@ class ModalManager {
             });
             
         } catch (error) {
-            this.renderError('Ошибка загрузки: ' + error.message);
+            this.renderError('ошибка: ' + error.message);
         }
     }
 
@@ -404,18 +403,18 @@ class ModalManager {
             }
             
             const isCompatible = caseFormFactors.some(factor => {
-                const factorUpper = factor.toUpperCase();
-                if (factorUpper === mbFormFactor) return true;
+                const factor_upper = factor.toUpperCase();
+                if (factor_upper === mbFormFactor) return true;
                 
-                const compatibilityHierarchy = {
+                const compability_cases = {
                     'E-ATX': ['E-ATX', 'ATX', 'MICRO-ATX', 'MINI-ITX'],
                     'ATX': ['ATX', 'MICRO-ATX', 'MINI-ITX'],
                     'MICRO-ATX': ['MICRO-ATX', 'MINI-ITX'],
                     'MINI-ITX': ['MINI-ITX']
                 };
                 
-                if (compatibilityHierarchy[factorUpper]) {
-                    return compatibilityHierarchy[factorUpper].includes(mbFormFactor);
+                if (compability_cases[factor_upper]) {
+                    return compability_cases[factor_upper].includes(mbFormFactor);
                 }
                 
                 return false;
@@ -439,14 +438,14 @@ class ModalManager {
             const componentData = await this.dataManager.getComponentDetails(componentId, apiCategory);
             
             if (!componentData) {
-                throw new Error('Компонент не найден');
+                throw new Error('компонент не найден');
             }
             
             if (!componentData.category) {
                 componentData.category = componentType.replace(/s$/, '');
             }
             
-            this.hideComponentModal();
+            this.hide_component_modal();
             
             setTimeout(() => {
                 if (window.configurator && window.configurator.selectComponent) {
@@ -455,7 +454,7 @@ class ModalManager {
             }, 100);
             
         } catch (error) {
-            alert(`Ошибка выбора компонента: ${error.message}`);
+            alert(`ошибка выбора компонента: ${error.message}`);
         }
     }
 
@@ -616,7 +615,7 @@ class ModalManager {
         return new Intl.NumberFormat('ru-RU').format(price);
     }
 
-    hideComponentModal() {
+    hide_component_modal() {
         const modal = document.getElementById('component-modal');
         modal.classList.add('hidden');
         this.currentComponentType = null;

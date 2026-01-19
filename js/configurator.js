@@ -270,23 +270,8 @@ class Configurator {
         }
          
         if (!this.dataManager) {
-            this.showMessage('Ошибка: менеджер данных не загружен', 'error');
+            this.showMessage('менеджер данных не загружен', 'error');
             return;
-        }
-        
-        try {
-            if (typeof ModalManager !== 'undefined') {
-                const modalManager = new ModalManager(this.dataManager, this);
-                const filters = this.dataManager.getCompatibilityFilters(this.currentBuild);
-                await modalManager.showComponentModal(componentType, filters);
-                
-                window.modalManager = modalManager;
-                this.modalManager = modalManager;
-            } else {
-                throw new Error('ModalManager class not loaded');
-            }
-        } catch (error) {
-            this.showMessage(`Ошибка открытия выбора: ${error.message}`, 'error');
         }
     }
 
@@ -310,26 +295,26 @@ class Configurator {
             }
             
             if (!componentType) {
-                this.showMessage('Ошибка: тип компонента не определен', 'error');
+                this.showMessage('тип компонента не определен', 'error');
                 return;
             }
         }
     
         
         if (!componentType) {
-            this.showMessage('Ошибка: тип компонента не определен', 'error');
+            this.showMessage('тип компонента не определен', 'error');
             return;
         }
         
         if (!componentData) {
-            this.showMessage('Ошибка: нет данных компонента', 'error');
+            this.showMessage('нет данных компонента', 'error');
             return;
         }
         
         let realComponent = this.extractComponentData(componentData);
         
         if (!realComponent) {
-            this.showMessage('Ошибка: неверный формат данных компонента', 'error');
+            this.showMessage('неверный формат данных компонента', 'error');
             return;
         }
         
@@ -548,10 +533,10 @@ class Configurator {
         }
 
         if (selectedCount === 0) {
-            statusMessage = 'Начните выбирать компоненты для совместимости';
+            statusMessage = 'Выберите компоненты для совместимости';
         } else if (this.compatibilityStatus.isValid && !this.compatibilityStatus.hasWarnings) {
             if (selectedCount === totalCount) {
-                statusMessage = 'Все компоненты совместимы! Сборка готова к сохранению.';
+                statusMessage = 'Все компоненты совместимы!';
             } else {
                 statusMessage = `Выбранные компоненты совместимы. Выбрано ${selectedCount} из ${totalCount} компонентов.`;
             }
@@ -884,9 +869,9 @@ class Configurator {
                 }
             }
             
-            const status = this.getComponentCompatibilityStatus(typeInfo.type, component);
-            const statusText = this.getCompatibilityStatusText(status);
-            const statusIcon = this.getCompatibilityStatusIcon(status);
+            const status = this.get_Status(typeInfo.type, component);
+            const statusText = this.get_text(status);
+            const statusIcon = this.get_icon(status);
             
             const componentImage = this.getComponentImagePath(component, typeInfo.type);
             
@@ -983,9 +968,9 @@ class Configurator {
                     }
                 }
                 
-                const storageStatus = this.getComponentCompatibilityStatus(typeInfo.type, storage);
-                const statusText = this.getCompatibilityStatusText(storageStatus);
-                const statusIcon = this.getCompatibilityStatusIcon(storageStatus);
+                const storageStatus = this.get_Status(typeInfo.type, storage);
+                const statusText = this.get_text(storageStatus);
+                const statusIcon = this.get_icon(storageStatus);
                 
                 const storageImage = this.getComponentImagePath(storage, typeInfo.type);
                 
@@ -1088,7 +1073,7 @@ class Configurator {
                 grid.innerHTML = `
                     <div class="no-data">
                         <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 10px;">
-                        <p>У вас пока нет сохраненных сборок.</p>
+                        <p>Нет сохраненных сборок.</p>
                         <button class="btn btn-primary" onclick="document.getElementById('favorites-modal').classList.add('hidden')">
                             Создать первую сборку
                         </button>
@@ -1108,7 +1093,7 @@ class Configurator {
             grid.innerHTML = `
                 <div class="no-data">
                     <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 10px;">
-                    <p>У вас пока нет сохраненных сборок.</p>
+                    <p>Нет сохраненных сборок.</p>
                     <button class="btn btn-primary" onclick="document.getElementById('favorites-modal').classList.add('hidden')">
                         Создать первую сборку
                     </button>
@@ -1162,7 +1147,7 @@ class Configurator {
                 
                 <div class="build-card-content">
                     <h3>${build.name || 'Конфигурация ПК'}</h3>
-                    <p class="user">${build.username || 'Моя сборка'}</p>
+                    <p class="user">${build.username || 'Сборка'}</p>
                     <div class="price">${totalPrice} ₽</div>
                 </div>
 
@@ -1460,7 +1445,7 @@ class Configurator {
         }
     }
 
-    getComponentCompatibilityStatus(componentType, componentData) {
+    get_Status(componentType, componentData) {
         if (!this.compatibilityStatus) return 'unknown';
         
         if (this.compatibilityStatus.isValid && !this.compatibilityStatus.hasWarnings) {
@@ -1572,7 +1557,7 @@ class Configurator {
         return possiblePaths[0];
     }
 
-    getComponentStatusFromCompatibilityErrors(componentType, component) {
+    get_error_compability(componentType, component) {
         if (!component) return 'unknown';
         
         const compatibility = this.checkComponentCompatibility(componentType, component);
@@ -1596,13 +1581,13 @@ class Configurator {
                 if (container) {
                     const selectedView = container.querySelector('.selected-component-view');
                     if (selectedView) {
-                        const status = this.getComponentStatusFromCompatibilityErrors(type, component);
+                        const status = this.get_error_compability(type, component);
                         selectedView.className = `selected-component-view ${status}`;
                         
                         const statusElement = selectedView.querySelector('.selected-component-status');
                         if (statusElement) {
-                            statusElement.textContent = this.getCompatibilityStatusIcon(status);
-                            statusElement.title = this.getCompatibilityStatusText(status);
+                            statusElement.textContent = this.get_icon(status);
+                            statusElement.title = this.get_text(status);
                         }
                     }
                 }
@@ -1620,8 +1605,8 @@ class Configurator {
                         
                         const statusElement = storageViews[index].querySelector('.selected-component-status');
                         if (statusElement) {
-                            statusElement.textContent = this.getCompatibilityStatusIcon(status);
-                            statusElement.title = this.getCompatibilityStatusText(status);
+                            statusElement.textContent = this. get_icon(status);
+                            statusElement.title = this.get_text(status);
                         }
                     }
                 }
@@ -1629,7 +1614,7 @@ class Configurator {
         }
     }
 
-    getCompatibilityStatusIcon(status) {
+    get_icon(status) {
         switch(status) {
             case 'success': return '✓';
             case 'warning': return '⚠';
@@ -1638,7 +1623,7 @@ class Configurator {
         }
     }
 
-    getCompatibilityStatusText(status) {
+    get_text(status) {
         switch(status) {
             case 'success': return 'Компонент совместим с остальной сборкой';
             case 'warning': return 'Есть предупреждение по совместимости. Проверьте спецификации.';

@@ -1,7 +1,7 @@
 class DataManager {
     constructor() {
         this.componentDetailsCache = new Map();
-        this.compatibilityRules = this.getCompatibilityRules();
+        this.compatibilityRules = this.get_comp_rules();
         this.API_BASE_URL = 'api/'; 
         
         this.categoryMapping = {
@@ -579,7 +579,7 @@ class DataManager {
         return filters;
     }
 
-    getCompatibilityRules() {
+    get_comp_rules() {
         return {
             sockets: {
                 'AM4': ['AM4'],
@@ -655,14 +655,13 @@ class DataManager {
     }
 
     getComponentImagePath(component) {
-        
         if (!component || !component.image) {
             return 'source/icons/default_component.png';
         }
         
         let imagePath = component.image;
         
-        let categoryFolder = this.getComponentCategoryFolder(component);
+        let categoryFolder = this.get_componentfolder(component);
         
         const possiblePaths = [];
         
@@ -690,7 +689,7 @@ class DataManager {
         return possiblePaths[0];
     }
 
-    getComponentCategoryFolder(component) {
+    get_componentfolder(component) {
         if (!component || !component.category) {
             return 'components';
         }
