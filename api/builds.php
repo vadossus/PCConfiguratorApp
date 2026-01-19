@@ -46,7 +46,8 @@ function getCategoryName($componentType) {
 }
 
 
-function getFullComponentData($componentId, $componentType, $db) {  
+function getFullComponentData($componentId, $componentType, $db) {
+
     if (!$componentId || !$componentType) {
         return null;
     }
@@ -68,8 +69,7 @@ function getFullComponentData($componentId, $componentType, $db) {
         if (!$tableName) {
             return null;
         }
-        
-        
+             
         $checkTable = $db->query("SHOW TABLES LIKE '$tableName'");
         if ($checkTable->rowCount() === 0) {
             return null;
@@ -79,8 +79,7 @@ function getFullComponentData($componentId, $componentType, $db) {
         $checkStmt = $db->prepare($checkQuery);
         $checkStmt->execute([$componentId]);
         $count = $checkStmt->fetch(PDO::FETCH_ASSOC)['count'];
-        
-        
+          
         if ($count == 0) {
             return null;
         }
@@ -110,7 +109,6 @@ function getFullComponentData($componentId, $componentType, $db) {
             
             return $component;
         }
-        
         return null;
         
     } catch (Exception $e) {
@@ -123,7 +121,7 @@ if ($action === 'save') {
         http_response_code(401);
         echo json_encode([
             "success" => false, 
-            "message" => "Необходима авторизация. Пожалуйста, войдите в систему."
+            "message" => "Необходима авторизация"
         ]);
         exit;
     }
@@ -141,7 +139,7 @@ if ($action === 'save') {
         http_response_code(400);
         echo json_encode([
             "success" => false, 
-            "message" => "Сборка пуста. Выберите хотя бы один компонент."
+            "message" => "Сборка пустая, нужно выбрать 3 компонента"
         ]);
         exit;
     }
@@ -564,7 +562,7 @@ if ($action === 'stats') {
         http_response_code(500);
         echo json_encode([
             'success' => false, 
-            'message' => 'Ошибка получения статистики'
+            'message' => 'статистика не загрузилась'
         ]);
     }
     exit;

@@ -33,6 +33,7 @@
     100% { transform: rotate(360deg); }
 }
 
+
 .loader.pulse .loader-spinner {
     animation: pulse 1.5s ease-in-out infinite;
     border: none;

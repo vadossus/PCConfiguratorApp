@@ -30,7 +30,7 @@ class Configurator {
         
         const domLoadedHandler = () => {
             this.renderComponentCards();
-            this.calculatePowerConsumption();
+            this.calculate_power();
             this.updateCompatibilityStatus();
             this.initEventListeners();
             this.initFavoritesModal();
@@ -63,7 +63,6 @@ class Configurator {
         
         const container = document.getElementById('components-table-container');
         if (!container) {
-            console.error('Container not found: components-table-container');
             return;
         }
         
@@ -85,18 +84,16 @@ class Configurator {
 
     updateTotalPriceDisplay() {
         const totalPrice = this.calculateTotalPrice();
+        const totalPriceElement = document.getElementById('total-price');
         
-        const totalPriceElements = [
-            document.getElementById('total-price'),
-            document.getElementById('build-price'),
-            document.getElementById('total-price-display') 
-        ];
+        if (totalPriceElement) {
+            totalPriceElement.textContent = this.formatPrice(totalPrice) + ' ₽';
+        }
         
-        totalPriceElements.forEach(element => {
-            if (element) {
-                element.textContent = this.formatPrice(totalPrice) + ' ₽';
-            }
-        });
+        const buildPriceElement = document.getElementById('build-price');
+        if (buildPriceElement) {
+            buildPriceElement.textContent = this.formatPrice(totalPrice) + ' ₽';
+        }
     }
 
     initFavoritesModal() {
@@ -238,7 +235,7 @@ class Configurator {
         const overclockCheckbox = document.getElementById('overclock-check');
         if (overclockCheckbox) {
             overclockCheckbox.addEventListener('change', () => {
-                this.calculatePowerConsumption();
+                this.calculate_power();
             });
         }
 
@@ -335,10 +332,6 @@ class Configurator {
             this.showMessage('Ошибка: неверный формат данных компонента', 'error');
             return;
         }
-        else
-        {
-            realComponent.price = Number(realComponent.price) || 0;
-        }
         
         
         if (!realComponent.id) {
@@ -378,14 +371,13 @@ class Configurator {
         
         this.renderComponentCards();
         this.updateCompatibilityStatus();
-        this.calculatePowerConsumption();
+        this.calculate_power();
         this.saveBuildToStorage();
         
         this.showMessage(`"${realComponent.name}" добавлен в сборку!`, 'success');
     }
 
     extractComponentData(data) {
-        
         if (!data) return null;
         
         if (data.id && data.name) {
@@ -403,44 +395,6 @@ class Configurator {
         if (Array.isArray(data) && data.length > 0) {
             return data[0];
         }
-        
-        console.warn('Unknown component format, using as is');
-        return data;
-    }
-
-    normalizeComponentData(componentData, componentType) {
-        if (componentData && componentData.id && componentData.name) {
-            return componentData;
-        }
-        
-        if (componentData && componentData.component) {
-            return componentData.component;
-        }
-        
-        return componentData || {
-            id: Date.now(),
-            name: 'Неизвестный компонент',
-            price: 0,
-            critical_specs: ['Характеристики не указаны']
-        };
-    }
-
-    normalizeComponentResponse(data) {   
-        if (!data) return null;
-        
-        if (data.success && data.component) {
-            return data.component;
-        }
-        
-        if (data.id && data.name) {
-            return data;
-        }
-        
-        if (Array.isArray(data)) {
-            return data.map(item => this.normalizeComponentResponse(item));
-        }
-        
-        console.warn('Неизвестный формат данных:', data);
         return data;
     }
 
@@ -509,7 +463,7 @@ class Configurator {
             }
             
             this.renderComponentCards();
-            this.calculatePowerConsumption();
+            this.calculate_power();
             this.updateCompatibilityStatus();
             this.saveBuildToStorage();
             this.showMessage('Компонент удален из сборки', 'success');
@@ -569,147 +523,7 @@ class Configurator {
             }, 300);
         }
     }
-    calculateDetailedPowerConsumption() {
-        const components = [];
-        let totalBasePower = 0;
-        
-        const getWattage = (component) => {
-            if (!component) return 0;
-            const compData = component.component || component;
-            
-            if (compData.wattage !== undefined && compData.wattage !== null) {
-                return parseInt(compData.wattage);
-            }
-            if (compData.tdp !== undefined && compData.tdp !== null) {
-                return parseInt(compData.tdp);
-            }
-            if (compData.power_draw !== undefined && compData.power_draw !== null) {
-                return parseInt(compData.power_draw);
-            }
-            
-
-            const defaultWattages = {
-                'cpu': 65,
-                'gpu': 150,
-                'ram': 5,
-                'storage': 10,
-                'motherboard': 50,
-                'psu': 10,
-                'case': 5,
-                'cooler': 5
-            };
-            
-            return defaultWattages[compData.category] || 10;
-        };
-        
-        if (this.currentBuild.cpus) {
-            const wattage = getWattage(this.currentBuild.cpus);
-            components.push({
-                type: 'cpu',
-                name: this.currentBuild.cpus.name || 'Процессор',
-                wattage: wattage,
-                icon: '⚡'
-            });
-            totalBasePower += wattage;
-        }
-        
-        if (this.currentBuild.gpus) {
-            const wattage = getWattage(this.currentBuild.gpus);
-            components.push({
-                type: 'gpu',
-                name: this.currentBuild.gpus.name || 'Видеокарта',
-                wattage: wattage,
-                icon: '🎮'
-            });
-            totalBasePower += wattage;
-        }
-        
-        if (this.currentBuild.rams) {
-            const wattage = getWattage(this.currentBuild.rams);
-            components.push({
-                type: 'ram',
-                name: this.currentBuild.rams.name || 'Оперативная память',
-                wattage: wattage,
-                icon: '💾'
-            });
-            totalBasePower += wattage;
-        }
-        
-        if (this.currentBuild.motherboards) {
-            const wattage = getWattage(this.currentBuild.motherboards);
-            components.push({
-                type: 'motherboard',
-                name: this.currentBuild.motherboards.name || 'Материнская плата',
-                wattage: wattage,
-                icon: '🔌'
-            });
-            totalBasePower += wattage;
-        }
-        
-        if (Array.isArray(this.currentBuild.storages) && this.currentBuild.storages.length > 0) {
-            this.currentBuild.storages.forEach((storage, index) => {
-                const wattage = getWattage(storage);
-                const type = (storage.type || 'storage').toLowerCase();
-                const prefix = type.includes('m.2') || type.includes('nvme') ? 'M.2' : 
-                             type.includes('sata') ? 'SATA' : 'Хранилище';
-                
-                components.push({
-                    type: 'storage',
-                    name: `${prefix} x${index + 1}: ${storage.name || 'Накопитель'}`,
-                    wattage: wattage,
-                    icon: '💿'
-                });
-                totalBasePower += wattage;
-            });
-        }
-        
-        if (this.currentBuild.coolers) {
-            const wattage = getWattage(this.currentBuild.coolers);
-            components.push({
-                type: 'cooler',
-                name: this.currentBuild.coolers.name || 'Система охлаждения',
-                wattage: wattage,
-                icon: '❄️'
-            });
-            totalBasePower += wattage;
-        }
-        
-        if (this.currentBuild.cases) {
-            const wattage = getWattage(this.currentBuild.cases);
-            components.push({
-                type: 'case',
-                name: this.currentBuild.cases.name || 'Корпус',
-                wattage: wattage,
-                icon: '🖥️'
-            });
-            totalBasePower += wattage;
-        }
-        
-        const additionalComponents = 30; 
-        if (additionalComponents > 0) {
-            components.push({
-                type: 'other',
-                name: 'Прочие компоненты',
-                wattage: additionalComponents,
-                icon: '➕'
-            });
-            totalBasePower += additionalComponents;
-        }
-        
-        const k = 1.5; 
-        const calculatedPower = Math.ceil(totalBasePower * k);
-        
-        return {
-            components: components,
-            totalBasePower: totalBasePower,
-            calculatedPower: calculatedPower,
-            coefficient: k,
-            hasPSU: !!this.currentBuild.psus,
-            psuWattage: this.currentBuild.psus ? getWattage(this.currentBuild.psus) : 0
-        };
-    }
-
-
+    
     renderCompatibilityStatus() {
         const progressBar = document.getElementById('progress-bar');
         const compatibilityText = document.getElementById('compatibility-text');
@@ -725,7 +539,7 @@ class Configurator {
         compatibilityCount.textContent = `${selectedCount}/${totalCount}`;
         progressBar.style.width = `${progress}%`;
         
-        if (progress === 100 && this.compatibilityStatus.isValid && !this.compatibilityStatus.hasWarnings) {
+        if (progress === 100 && this.compatibilityStatus.isValid) {
             progressBar.style.background = 'linear-gradient(90deg, #28a745, #20c997)';
         } else if (progress >= 50) {
             progressBar.style.background = 'linear-gradient(90deg, #ffc107, #fd7e14)';
@@ -770,21 +584,14 @@ class Configurator {
 
     calculateTotalPrice() {
         let total = 0;
-    
+        
         Object.values(this.currentBuild).forEach(component => {
             if (Array.isArray(component)) {
                 component.forEach(item => {
-                    const itemData = item.component || item;
-                    if (itemData && itemData.price) {
-                        total += Number(itemData.price);
-                    }
+                    total += item.price || 0;
                 });
-            } else if (component) {
-                const compData = component.component || component;
-                
-                if (compData.price !== undefined && compData.price !== null) {
-                    total += Number(compData.price);
-                }
+            } else if (component && component.price) {
+                total += component.price;
             }
         });
         
@@ -818,14 +625,13 @@ class Configurator {
             this.renderComponentCards();
             this.updateCompatibilityStatus();
             this.clearBuildFromStorage();
-            this.calculatePowerConsumption();
+            this.calculate_power();
             this.showMessage('Сборка сброшена', 'success');
         }
     }
 
     renderComponentCard(component, componentType, isSelected = false) {
         if (!component) {
-            console.error('renderComponentCard: component is null or undefined');
             return '';
         }
         
@@ -881,26 +687,25 @@ class Configurator {
         `;
     }
 
-    calculatePowerConsumption() {
+    calculate_power() {
         let totalPower = 0;
-        let power12vPSU = 0; 
         const build = this.currentBuild;
         
         let detailsHTML = '';
         let hasComponents = false;
         
+    
         const defaultWattages = {
-            cpus: 65,
-            gpus: 150,
-            motherboards: 50,
-            rams: 5,
-            coolers: 8,
-            cases: 10,
-            psus: 0,
-            storages: 5
+            cpus: 65,       
+            gpus: 150,      
+            motherboards: 50, 
+            rams: 5,        
+            coolers: 8,     
+            cases: 10,      
+            psus: 0,        
+            storages: 5     
         };
         
- 
         if (build.cpus) {
             hasComponents = true;
             let cpuPower = parseInt(build.cpus.wattage) || defaultWattages.cpus;
@@ -915,6 +720,7 @@ class Configurator {
             detailsHTML += `<div class="power-item"><span>Видеокарта</span> <span>${gpuPower} W</span></div>`;
         }
         
+
         if (build.motherboards) {
             hasComponents = true;
             let mbPower = parseInt(build.motherboards.wattage);
@@ -928,7 +734,7 @@ class Configurator {
             let ramPower = parseInt(build.rams.wattage);
             if (isNaN(ramPower) || ramPower <= 0) ramPower = defaultWattages.rams;
             totalPower += ramPower;
-            detailsHTML += `<div class="power-item"><span>ОЗУ</span> <span>${ramPower} W</span></div>`;
+            detailsHTML += `<div class="power-item"><span>Оперативная память</span> <span>${ramPower} W</span></div>`;
         }
         
         if (Array.isArray(build.storages) && build.storages.length > 0) {
@@ -945,7 +751,7 @@ class Configurator {
             let coolerPower = parseInt(build.coolers.wattage);
             if (isNaN(coolerPower) || coolerPower <= 0) coolerPower = defaultWattages.coolers;
             totalPower += coolerPower;
-            detailsHTML += `<div class="power-item"><span>Охлаждение</span> <span>${coolerPower} W</span></div>`;
+            detailsHTML += `<div class="power-item"><span>Кулер процессора</span> <span>${coolerPower} W</span></div>`;
         }
         
         if (build.cases) {
@@ -955,30 +761,26 @@ class Configurator {
             totalPower += casePower;
             detailsHTML += `<div class="power-item"><span>Корпус</span> <span>${casePower} W</span></div>`;
         }
-             
+        
         if (build.psus) {
-            const psuWattage = parseInt(build.psus.wattage) || 0;
-            power12vPSU = Math.round(psuWattage * 0.8); 
-            detailsHTML += `<div class="power-item"><span>Блок питания (общая)</span> <span>${psuWattage} W</span></div>`;
-            detailsHTML += `<div class="power-item"><span>Линия 12V блока питания</span> <span>${power12vPSU} W</span></div>`;
+            hasComponents = true;
+            let psuWattage = parseInt(build.psus.wattage) || 0;
+            if (psuWattage > 0) {
+                detailsHTML += `<div class="power-item"><span>Блок питания</span> <span>${psuWattage} W</span></div>`;
+            }
         }
-
+        
         const overclockCheckbox = document.getElementById('overclock-check');
-        let overclockPower = 0;
         if (overclockCheckbox && overclockCheckbox.checked && hasComponents) {
             let cpuPower = build.cpus ? (parseInt(build.cpus.wattage) || defaultWattages.cpus) : 0;
             let gpuPower = build.gpus ? (parseInt(build.gpus.wattage) || defaultWattages.gpus) : 0;
-            overclockPower = Math.ceil((cpuPower + gpuPower) * 0.20);
+            let overclockPower = Math.ceil((cpuPower + gpuPower) * 0.20);
             
             if (overclockPower > 0) {
                 totalPower += overclockPower;
                 detailsHTML += `<div class="power-item" style="color: #ff9800"><span>Разгон (+20%)</span> <span>+${overclockPower} W</span></div>`;
             }
         }
-        
-        const power12vRequired = Math.round(totalPower * 0.85);
-        
-        const powerReserve = power12vPSU - power12vRequired;
         
         const wattageElement = document.getElementById('total-wattage');
         if (wattageElement) {
@@ -991,10 +793,20 @@ class Configurator {
                 breakdownList.innerHTML = `<div class="no-components">Выберите компоненты для расчета</div>`;
             } else {
                 detailsHTML += `<div class="power-divider"></div>`;
-                detailsHTML += `<div class="power-item total"><span>Общее потребление</span> <span>${totalPower} W</span></div>`;               
-                if (build.psus && power12vPSU > 0) {
-                    detailsHTML += `<div class="power-divider"></div>`;
-                    detailsHTML += `<div class="power-item"><span>Запас мощности по 12V</span> <span>${powerReserve} W</span></div>`;   
+                detailsHTML += `<div class="power-item total"><span>Итого потребление</span> <span>${totalPower} W</span></div>`;
+                const recommendedPower = Math.ceil(totalPower * 1.2);
+                detailsHTML += `<div class="power-item recommendation"><span>Рекомендуемый БП</span> <span>от ${recommendedPower} W</span></div>`;
+                if (build.psus) {
+                    const psuWattage = parseInt(build.psus.wattage) || 0;
+                    if (psuWattage > 0) {
+                        if (psuWattage < totalPower) {
+                            detailsHTML += `<div class="power-item warning"><span>Выбранный БП (${psuWattage}W) маловат</span></div>`;
+                        } else if (psuWattage >= recommendedPower) {
+                            detailsHTML += `<div class="power-item ok"><span>Выбранный БП (${psuWattage}W) подходит</span></div>`;
+                        } else {
+                            detailsHTML += `<div class="power-item warning"><span>Выбранный БП (${psuWattage}W) без запаса</span></div>`;
+                        }
+                    }
                 }
                 
                 breakdownList.innerHTML = detailsHTML;
@@ -1061,7 +873,7 @@ class Configurator {
         
         if (hasComponent) {
             const name = component.name || 'Без названия';
-            const price = component.price ? `${this.formatPrice(component.price)} ₽` : '0 ₽';
+            const price = component.price ? `${this.formatPrice(component.price)} ₽` : 'Цена не указана';
             
             let specs = 'Характеристики не указаны';
             if (component.critical_specs) {
@@ -1274,18 +1086,9 @@ class Configurator {
                 this.renderFavorites(data.builds);
             } else {
                 grid.innerHTML = `
-                    <div class="no-data" style="
-                        grid-column: 1 / -1; 
-                        display: flex; 
-                        flex-direction: column; 
-                        align-items: center; 
-                        justify-content: center; 
-                        text-align: center; 
-                        padding: 40px 20px; 
-                        width: 100%;
-                    ">
-                        <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 15px;">
-                        <p style="margin-bottom: 20px; font-size: 1.1rem; color: #666;">У вас пока нет сохраненных сборок.</p>
+                    <div class="no-data">
+                        <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 10px;">
+                        <p>У вас пока нет сохраненных сборок.</p>
                         <button class="btn btn-primary" onclick="document.getElementById('favorites-modal').classList.add('hidden')">
                             Создать первую сборку
                         </button>
@@ -1293,7 +1096,6 @@ class Configurator {
                 `;
             }
         } catch (error) {
-            console.error("Ошибка загрузки избранного:", error);
             loader.classList.add('hidden');
             grid.innerHTML = '<div class="no-data error">Не удалось загрузить сборки. Попробуйте позже.</div>';
         }
@@ -1541,9 +1343,9 @@ class Configurator {
                     
                     
                     if (type === 'storages' && Array.isArray(componentData)) {
-                        this.currentBuild[type] = componentData.map(item => this.normalizeComponentForConfigurator(item, type));
+                        this.currentBuild[type] = componentData.map(item => this.normal_component(item, type));
                     } else if (componentData && componentData.id) {
-                        this.currentBuild[type] = this.normalizeComponentForConfigurator(componentData, type);
+                        this.currentBuild[type] = this.normal_component(componentData, type);
                     }
                 }
             }
@@ -1558,8 +1360,7 @@ class Configurator {
             this.showMessage(`Сборка "${build.name}" загружена!`, 'success');
             
         } catch (error) {
-            console.error('Ошибка загрузки сборки:', error);
-            this.showMessage(`Ошибка загрузки: ${error.message}`, 'error');
+            this.showMessage(`${error.message}`, 'error');
         } finally {
             this.hideLoader();
         }
@@ -1585,29 +1386,28 @@ class Configurator {
             const data = await response.json();
             
             if (data.success && data.component) {
-                return this.normalizeComponentForConfigurator(data.component, componentType);
+                return this.normal_component(data.component, componentType);
             }
             
             return null;
         } catch (error) {
-            console.error('Ошибка получения компонента из БД:', error);
             return null;
         }
     }
 
-    normalizeComponentForConfigurator(component, componentType) {
+    normal_component(component, componentType) {
         return {
             id: component.id,
             name: component.name || 'Компонент',
-            price: Number(component.price) || 0, 
+            price: component.price || 0,
             category: componentType.slice(0, -1), 
             image: component.image || '',
             socket: component.socket || '',
             memory_type: component.memory_type || '',
-            wattage: Number(component.wattage) || 0, 
-            capacity: Number(component.capacity) || 0,
+            wattage: component.wattage || 0,
+            capacity: component.capacity || 0,
             speed: component.speed || '',
-            tdp: Number(component.tdp) || 0,
+            tdp: component.tdp || 0,
             type: component.type || '',
             
             critical_specs: this.parseJSONField(component.critical_specs, []),
@@ -1656,7 +1456,7 @@ class Configurator {
                 throw new Error(data.message || 'Ошибка удаления');
             }
         } catch (error) {
-            this.showMessage(`Ошибка: ${error.message}`, 'error');
+            this.showMessage(`${error.message}`, 'error');
         }
     }
 
@@ -1850,9 +1650,7 @@ class Configurator {
     
     formatPrice(price) {
         if (!price && price !== 0) return '0';
-        const num = Number(price);
-        if (isNaN(num)) return '0';
-        return new Intl.NumberFormat('ru-RU').format(num);
+        return new Intl.NumberFormat('ru-RU').format(price);
     }
 
     updateSaveButtonState() {
@@ -1890,7 +1688,7 @@ class Configurator {
                             !document.getElementById('register-fields').classList.contains('hidden');
 
         if (!username || !password) {
-            this.showAuthMessage('Заполните все обязательные поля', 'error');
+            this.showAuthMessage('Заполните поля', 'error');
             return;
         }
         
@@ -2150,7 +1948,6 @@ class Configurator {
             const data = await response.json();
             
             if (!response.ok) {
-                console.error("HTTP ошибка:", response.status, response.statusText);
                 throw new Error(data.message || "Ошибка сервера");
             }
 
@@ -2160,7 +1957,7 @@ class Configurator {
                     await this.loadUserBuilds();
                 }
             } else {
-                throw new Error(data.message || "Неизвестная ошибка");
+                throw new Error(data.message);
             }
             
         } catch (error) {

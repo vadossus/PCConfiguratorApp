@@ -28,7 +28,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                 if($user->userExists()) {
                     http_response_code(400);
-                    echo json_encode(array("message" => "Пользователь с таким именем или email уже существует."));
+                    echo json_encode(array("message" => "пользователь уже существует ."));
                 } else {
                     if($user->register()) {
                         http_response_code(201);
@@ -43,12 +43,12 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                         ));
                     } else {
                         http_response_code(503);
-                        echo json_encode(array("message" => "Ошибка при регистрации пользователя."));
+                        echo json_encode(array("message" => "ошибка регистрации"));
                     }
                 }
             } else {
                 http_response_code(400);
-                echo json_encode(array("message" => "Не все обязательные поля заполнены."));
+                echo json_encode(array("message" => "заполните поля."));
             }
         } 
         elseif($action == 'login') {
@@ -72,17 +72,17 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                     ));
                 } else {
                     http_response_code(401);
-                    echo json_encode(array("message" => "Неверное имя пользователя или пароль."));
+                    echo json_encode(array("message" => "неверное имя или пароль."));
                 }
             } else {
                 http_response_code(400);
-                echo json_encode(array("message" => "Не все обязательные поля заполнены."));
+                echo json_encode(array("message" => "не все поля заполнены."));
             }
         }
         elseif($action == 'logout') {
             session_start();
             session_destroy();
-            echo json_encode(array("message" => "Выход выполнен успешно."));
+            echo json_encode(array("message" => "выход выполнен успешно."));
         }
     }
 }

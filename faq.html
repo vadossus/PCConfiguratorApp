@@ -404,26 +404,20 @@
         </div>
     </main>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('FAQ page loaded');
-            
+        document.addEventListener('DOMContentLoaded', function() { 
             const faqItems = document.querySelectorAll('.faq-question');
-            console.log('Found', faqItems.length, 'FAQ items');
             
             faqItems.forEach(item => {
                 item.addEventListener('click', function() {
-                    console.log('FAQ item clicked');
                     const answer = this.nextElementSibling;
                     const toggle = this.querySelector('.faq-toggle');
                     
                     if (answer.style.maxHeight && answer.style.maxHeight !== '0px') {
                         answer.style.maxHeight = null;
                         toggle.textContent = '+';
-                        console.log('FAQ closed');
                     } else {
                         answer.style.maxHeight = answer.scrollHeight + "px";
                         toggle.textContent = '−';
-                        console.log('FAQ opened, height:', answer.scrollHeight);
                     }
                 });
             });
@@ -434,8 +428,6 @@
             categoryBtns.forEach(btn => {
                 btn.addEventListener('click', function() {
                     const category = this.dataset.category;
-                    console.log('Category selected:', category);
-                    
                     categoryBtns.forEach(b => b.classList.remove('active'));
                     this.classList.add('active');
                     
@@ -443,7 +435,6 @@
                         cat.classList.remove('active');
                         if (cat.id === `${category}-category`) {
                             cat.classList.add('active');
-                            console.log('Showing category:', cat.id);
                         }
                     });
                     

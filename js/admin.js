@@ -57,7 +57,7 @@ class AdminPanel {
         const savedUser = localStorage.getItem('currentUser');
         
         if (!savedUser) {
-            this.redirectToLogin();
+            window.location.href = 'index.html';
             return false;
         }
         
@@ -65,14 +65,14 @@ class AdminPanel {
             const user = JSON.parse(savedUser);
             
             if (user.role !== 'admin') {
-                this.showAccessDenied();
+                window.location.href = 'index.html';
                 return false;
             }
             
             return true;
             
         } catch (error) {
-            this.redirectToLogin();
+            window.location.href = 'index.html';
             return false;
         }
     }
@@ -751,7 +751,6 @@ class AdminPanel {
                         <button class="btn btn-sm btn-outline-primary" 
                                 onclick="adminPanel.editComponent(${component.id})" 
                                 title="Редактировать">
-                            ✏️
                         </button>
                         <button class="btn btn-sm btn-outline-danger" 
                                 onclick="adminPanel.deleteComponent(${component.id})" 
@@ -816,10 +815,10 @@ class AdminPanel {
 
     async editComponent(id) {
         try {
-            this.showLoader('Загрузка данных компонента...');
+            this.showLoader('Загрузка компонентов...');
             
             const response = await fetch(`${this.API_BASE_URL}get_components`);
-            if (!response.ok) throw new Error('Ошибка загрузки компонентов');
+            if (!response.ok) throw new Error('ошибка загрузки компонентов');
             
             const data = await response.json();
             this.hideLoader();
@@ -829,15 +828,15 @@ class AdminPanel {
                 if (component) {
                     this.showEditComponentModal(component);
                 } else {
-                    this.showError('Компонент не найден');
+                    this.showError('компонент не найден');
                 }
             } else {
-                this.showError(data.message || 'Ошибка загрузки компонентов');
+                this.showError(data.message || 'ошибка загрузки компонентов');
             }
             
         } catch (error) {
             this.hideLoader();
-            this.showError('Ошибка загрузки данных компонента');
+            this.showError('ошибка загрузки данных компонента');
         }
     }
 
@@ -885,7 +884,7 @@ class AdminPanel {
                             <input type="text" name="image" value="${this.escapeHtml(component.image || '')}" 
                                 placeholder="URL или имя файла">
                             <small class="form-text">
-                                Введите URL или из папки source/категория/
+                                Введите URL (ссылкой) или имя файла из папки source/категория/
                             </small>
                         </div>
                         
@@ -901,7 +900,6 @@ class AdminPanel {
                             </div>
                         </div>
                         
-
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Мощность (Вт):</label>
@@ -985,7 +983,7 @@ class AdminPanel {
                 try {
                     componentData.critical_specs = JSON.parse(criticalSpecsText);
                 } catch (e) {
-                    this.showError('Ошибка в JSON critical_specs');
+                    this.showError('Ошибка в critical_specs');
                     return;
                 }
             }
@@ -995,7 +993,7 @@ class AdminPanel {
                 try {
                     componentData.compatibility_flags = JSON.parse(compatibilityFlagsText);
                 } catch (e) {
-                    this.showError('Ошибка в JSON compatibility_flags');
+                    this.showError('Ошибка в compatibility_flags');
                     return;
                 }
             }
@@ -1009,12 +1007,12 @@ class AdminPanel {
             const data = await response.json();
             
             if (data.success) {
-                this.showSuccess('Компонент успешно обновлен');
+                this.showSuccess('компонент успешно обновлен');
                 await this.logActivity('component_edit', `Обновлён компонент ID: ${componentData.id}`);
                 document.getElementById('edit-component-modal')?.remove();
                 this.loadComponents();
             } else {
-                this.showError(data.message || 'Ошибка обновления');
+                this.showError(data.message || 'ошибка обновления');
             }
             
         } catch (error) {
@@ -1174,7 +1172,7 @@ class AdminPanel {
                             <div class="form-group">
                                 <label>Изображение:</label>
                                 <input type="text" name="image" 
-                                    placeholder="URL (ссылкой) или имя файла (пример: cpu_amd.png)">
+                                    placeholder="Ссылкой или имя файла (например: cpu_amd.png)">
                                 <small class="form-text">
                                     Можно указать URL или имя файла из папки source/категория/
                                 </small>
@@ -1205,7 +1203,7 @@ class AdminPanel {
                                     <input type="number" name="capacity" min="0">
                                 </div>
                             </div>
-                       
+                            
                             <div class="form-group">
                                 <label>Критические характеристики (JSON массив):</label>
                                 <textarea name="critical_specs" placeholder='["6 ядер", "12 потоков", "3.7 ГГц"]' rows="3"></textarea>
@@ -1372,7 +1370,7 @@ class AdminPanel {
                 try {
                     componentData.critical_specs = JSON.parse(criticalSpecsText);
                 } catch (e) {
-                    this.showError('Ошибка в JSON critical_specs');
+                    this.showError('Ошибка в critical_specs');
                     return;
                 }
             }
@@ -1382,7 +1380,7 @@ class AdminPanel {
                 try {
                     componentData.compatibility_flags = JSON.parse(compatibilityFlagsText);
                 } catch (e) {
-                    this.showError('Ошибка в JSON compatibility_flags');
+                    this.showError('Ошибка в compatibility_flags');
                     return;
                 }
             }
@@ -1396,16 +1394,16 @@ class AdminPanel {
             const data = await response.json();
             
             if (data.success) {
-                this.showSuccess('Компонент успешно добавлен');
-                await this.logActivity('component_add', `Добавлен компонент: ${componentData.name}`);
+                this.showSuccess('компонент успешно добавлен');
+                await this.logActivity('component_add', `добавлен компонент: ${componentData.name}`);
                 document.getElementById('add-component-modal')?.remove();
                 this.loadComponents();
             } else {
-                this.showError(data.message || 'Ошибка добавления');
+                this.showError(data.message || 'ошибка добавления');
             }
             
         } catch (error) {
-            this.showError('Ошибка добавления компонента');
+            this.showError('ошибка добавления компонента');
         }
     }
 
@@ -1414,7 +1412,7 @@ class AdminPanel {
         const jsonText = textarea.value.trim();
         
         if (!jsonText) {
-            this.showError('Введите JSON данные');
+            this.showError('Введите в формате JSON данные');
             return;
         }
         
@@ -1431,7 +1429,7 @@ class AdminPanel {
         const jsonText = textarea.value.trim();
         
         if (!jsonText) {
-            this.showError('Введите JSON данные');
+            this.showError('Введите в формате JSON данные');
             return;
         }
         
@@ -1440,7 +1438,7 @@ class AdminPanel {
             const componentCount = this.countComponents(jsonData);
             
             this.showMessage(
-                `JSON валиден!\n\nНайдено компонентов:\n` +
+                `Найдено компонентов:\n` +
                 Object.entries(componentCount).map(([cat, count]) => `• ${this.componentTypes[cat] || cat}: ${count}`).join('\n'),
                 'success'
             );
@@ -1465,7 +1463,7 @@ class AdminPanel {
             this.showLoader('Импорт компонентов из JSON...');
             
             if (!jsonData.components) {
-                throw new Error('Неверный формат JSON: отсутствует секция components');
+                throw new Error('формат JSON не верный: отсутствует секция components');
             }
             
             let importedCount = 0;
@@ -1523,7 +1521,7 @@ class AdminPanel {
                 this.loadComponents();
             } else {
                 this.showMessage(
-                    `Импортировано ${importedCount} компонентов, ${errors.length} ошибок`,
+                    `импортировано ${importedCount} компонентов, ${errors.length} ошибок`,
                     'warning'
                 );
             }
@@ -1532,7 +1530,7 @@ class AdminPanel {
             
         } catch (error) {
             this.hideLoader();
-            this.showError('Ошибка импорта');
+            this.showError('ошибка импорта');
             return { importedCount: 0, errors: [error.message] };
         }
     }
@@ -1545,7 +1543,7 @@ class AdminPanel {
             image: component.image || '',
         };
         
-        componentData.description = `Импортирован: ${component.name}`;
+        componentData.description = `импортирован: ${component.name}`;
         
         if (component.critical_specs && Array.isArray(component.critical_specs)) {
             componentData.critical_specs = component.critical_specs;
@@ -1784,14 +1782,7 @@ class AdminPanel {
         return new Intl.NumberFormat('ru-RU').format(price || 0);
     }
 
-    redirectToLogin() {
-        window.location.href = 'index.html';
-    }
 
-    showAccessDenied() {
-        alert('Доступ запрещен. Требуются права администратора.');
-        this.redirectToLogin();
-    }
 
     escapeHtml(text) {
         const div = document.createElement('div');

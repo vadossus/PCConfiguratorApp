@@ -61,7 +61,7 @@ class PaginationManager {
             const response = await fetch('./data/basic_components.json');
             
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error(`ошибка http: ${response.status}`);
             }
             
             const data = await response.json();
@@ -72,128 +72,10 @@ class PaginationManager {
             return components;
             
         } catch (error) {
-            
-            const minimalData = this.getMinimalTestData(componentType);
-            
-            this.allComponentsCache.set(componentType, minimalData);
-            return minimalData;
+            throw new Error(`проблемы с компонентами`, error);
         }
     }
 
-    getMinimalTestData(componentType) {
-        const minimalData = {
-            cpus: [
-                {
-                    id: 1,
-                    name: "AMD Ryzen 5 5600X (Тестовый)",
-                    category: "cpu",
-                    price: 25000,
-                    image: "cpu/ryzen5_5600x.jpg",
-                    compatibility_flags: ["AM4", "DDR4"],
-                    critical_specs: ["6 ядер", "12 потоков", "3.7 ГГц"],
-                    socket: "AM4",
-                    wattage: 65
-                },
-                {
-                    id: 2,
-                    name: "Intel Core i5-12400F (Тестовый)", 
-                    category: "cpu", 
-                    price: 18000,
-                    image: "cpu/i5_12400f.jpg",
-                    compatibility_flags: ["LGA1700", "DDR4"],
-                    critical_specs: ["6 ядер", "12 потоков", "2.5 ГГц"],
-                    socket: "LGA1700",
-                    wattage: 65
-                }
-            ],
-            motherboards: [
-                {
-                    id: 1,
-                    name: "ASUS ROG Strix B550-F (Тестовый)",
-                    category: "motherboard",
-                    price: 15000,
-                    image: "motherboard/asus_b550f.jpg",
-                    compatibility_flags: ["AM4", "DDR4"],
-                    critical_specs: ["Socket AM4", "DDR4", "2 слота M.2"],
-                    socket: "AM4",
-                    memoryType: "DDR4",
-                    memorySlots: 4,
-                    m2Slots: 2,
-                    maxMemory: 128
-                }
-            ],
-            rams: [
-                {
-                    id: 1,
-                    name: "Kingston Fury Beast 16GB (Тестовый)",
-                    category: "ram", 
-                    price: 6000,
-                    image: "ram/kingston_fury_beast.jpg",
-                    compatibility_flags: ["DDR4"],
-                    critical_specs: ["16 ГБ", "DDR4", "3200 МГц"],
-                    type: "DDR4",
-                    speed: 3200,
-                    size: 16,
-                    modules: 2
-                }
-            ],
-            gpus: [
-                {
-                    id: 1,
-                    name: "NVIDIA RTX 3060 (Тестовый)",
-                    category: "gpu",
-                    price: 35000,
-                    image: "gpu/rtx3060.jpg",
-                    compatibility_flags: ["PCIe"],
-                    critical_specs: ["12 ГБ GDDR6", "PCIe 4.0"],
-                    wattage: 170,
-                    interface: "PCIe"
-                }
-            ],
-            storages: [
-                {
-                    id: 1,
-                    name: "Samsung 980 1TB (Тестовый)",
-                    category: "storage",
-                    price: 8000,
-                    image: "storage/samsung_980.jpg",
-                    compatibility_flags: ["M.2"],
-                    critical_specs: ["1 ТБ", "M.2 NVMe", "3500 МБ/с"],
-                    type: "M.2",
-                    capacity: 1000
-                }
-            ],
-            psus: [
-                {
-                    id: 1,
-                    name: "Seasonic 750W (Тестовый)",
-                    category: "psu",
-                    price: 9000,
-                    image: "psu/seasonic_focus.jpg",
-                    compatibility_flags: ["ATX"],
-                    critical_specs: ["750 Вт", "80+ Gold", "Полумодульный"],
-                    wattage: 750,
-                    efficiency: "80+ Gold",
-                    formFactor: "ATX"
-                }
-            ],
-            cases: [
-                {
-                    id: 1,
-                    name: "NZXT H510 (Тестовый)",
-                    category: "case", 
-                    price: 7000,
-                    image: "case/nzxt_h510.jpg",
-                    compatibility_flags: ["ATX"],
-                    critical_specs: ["Mid-Tower", "ATX", "Tempered Glass"],
-                    formFactor: "ATX",
-                    maxGPULength: 360
-                }
-            ]
-        };
-
-        return minimalData[componentType] || [];
-    }
 
     applyFilters(components, filters) {
         if (!filters || Object.keys(filters).length === 0) {
@@ -285,11 +167,4 @@ class PaginationManager {
     }
 }
 
-if (typeof window !== 'undefined') {
-    window.PaginationManager = PaginationManager;
-    
-    if (!window.paginationManager) {
-        window.paginationManager = new PaginationManager();
-    }
-}
 

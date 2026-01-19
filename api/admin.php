@@ -21,14 +21,12 @@ try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch(PDOException $e) {
-    echo json_encode(['success' => false, 'message' => 'Ошибка подключения к БД: ' . $e->getMessage()]);
+    echo json_encode(['success' => false, 'message' => 'ошибка подключения к БД: ' . $e->getMessage()]);
     exit;
 }
 
 $action = $_GET['action'] ?? '';
 $input = json_decode(file_get_contents('php://input'), true);
-
-
 switch($action) {
     case 'get_count':
         getCount($pdo);
@@ -346,7 +344,7 @@ function addComponent($pdo, $data) {
         }
         
         $basicFields = [
-            'description', 'socket', 'memory_type', 'form_factor',
+            'description', 'socket', 'memory_type', 'form_factor', 
             'wattage', 'efficiency', 'capacity', 'speed', 'tdp', 'type'
         ];
         
@@ -602,7 +600,7 @@ function updateComponent($pdo, $data) {
         $updateData = [];
         $allowedFields = [
             'name', 'description', 'price', 'image', 'socket', 'memory_type',
-            'form_factor','wattage', 'efficiency', 'capacity', 'speed', 'tdp', 'type',
+            'form_factor', 'wattage', 'efficiency', 'capacity', 'speed', 'tdp', 'type',
             'specs', 'compatibility_flags', 'critical_specs', 'is_active'
         ];
         

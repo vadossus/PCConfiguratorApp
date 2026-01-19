@@ -99,24 +99,24 @@ class Component {
 
     public function create() {
         $query = "INSERT INTO " . $this->table . " 
-            SET category_id = :category_id,
-                name = :name,
-                description = :description,
-                price = :price,
-                image = :image,
-                socket = :socket,
-                memory_type = :memory_type,
-                form_factor = :form_factor,
-                wattage = :wattage,
-                efficiency = :efficiency,
-                capacity = :capacity,
-                speed = :speed,
-                tdp = :tdp,
-                type = :type,
-                specs = :specs,
-                compatibility_flags = :compatibility_flags,
-                critical_specs = :critical_specs,
-                is_active = 1";
+                  SET category_id = :category_id,
+                      name = :name,
+                      description = :description,
+                      price = :price,
+                      image = :image,
+                      socket = :socket,
+                      memory_type = :memory_type,
+                      form_factor = :form_factor,
+                      wattage = :wattage,
+                      efficiency = :efficiency,
+                      capacity = :capacity,
+                      speed = :speed,
+                      tdp = :tdp,
+                      type = :type,
+                      specs = :specs,
+                      compatibility_flags = :compatibility_flags,
+                      critical_specs = :critical_specs,
+                      is_active = 1";  
 
         $stmt = $this->conn->prepare($query);
 
@@ -238,7 +238,7 @@ class Component {
 
     public function delete($id) {
         $query = "UPDATE " . $this->table . " 
-                  SET is_active = 0  
+                  SET is_active = 0  // ← ВАЖНО: используем is_active
                   WHERE id = :id";
 
         $stmt = $this->conn->prepare($query);

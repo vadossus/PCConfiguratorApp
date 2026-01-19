@@ -34,17 +34,10 @@ try {
     $db = $database->getConnection();
     
     if (!$db) {
-        sendError("Не удалось подключиться к базе данных", 500);
+        sendError("ошибка бд", 500);
     }
     
     $component = new Component($db);
-
-    function checkAdminAuth() {
-        @session_start();
-        if(!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-            sendError("Доступ запрещен. Требуются права администратора.", 401);
-        }
-    }
 
     if($_SERVER['REQUEST_METHOD'] == 'GET') {
         $category = isset($_GET['category']) ? $_GET['category'] : null;
@@ -58,11 +51,7 @@ try {
         if(isset($_GET['search'])) $filters['search'] = $_GET['search'];
 
         if(isset($_GET['id'])) {
-            $id = intval($_GET['id']);
-            if ($id <= 0) {
-                sendError("Неверный ID компонента", 400);
-            }
-            
+            $id = intval($_GET['id']);     
             $component_data = $component->getById($id);
             
             if($component_data) {
@@ -78,7 +67,7 @@ try {
                 
                 sendSuccess(["component" => $component_data]);
             } else {
-                sendError("Компонент не найден.", 404);
+                sendError("компонент не найден.", 404);
             }
         } 
         else {
@@ -142,10 +131,10 @@ try {
                     "id" => $component_id
                 ], 201);
             } else {
-                sendError("Ошибка при добавлении компонента.", 503);
+                sendError("ошибка добавления компонента.", 503);
             }
         } else {
-            sendError("Не все обязательные поля заполнены.", 400);
+            sendError("не все обязательные поля заполнены.", 400);
         }
     }
     elseif($_SERVER['REQUEST_METHOD'] == 'PUT') {
@@ -177,15 +166,13 @@ try {
             if($component->update()) {
                 sendSuccess(["message" => "Компонент успешно обновлен."]);
             } else {
-                sendError("Ошибка при обновлении компонента.", 503);
+                sendError("ошибка при обновлении компонента.", 503);
             }
         } else {
-            sendError("Не указан ID компонента.", 400);
+            sendError("id компонента не указан.", 400);
         }
     }
-    elseif($_SERVER['REQUEST_METHOD'] == 'DELETE') {
-        checkAdminAuth();
-        
+    elseif($_SERVER['REQUEST_METHOD'] == 'DELETE') {   
         $input = file_get_contents("php://input");
         $data = json_decode($input);
         
@@ -193,18 +180,16 @@ try {
             if($component->delete($data->id)) {
                 sendSuccess(["message" => "Компонент успешно удален."]);
             } else {
-                sendError("Ошибка при удалении компонента.", 503);
+                sendError("ошибка при удалении компонента.", 503);
             }
         } else {
-            sendError("Не указан ID компонента.", 400);
+            sendError("не указан ID компонента.", 400);
         }
-    } else {
-        sendError("Метод не поддерживается.", 405);
     }
     
 } catch (Exception $e) {
-    sendError("Ошибка сервера: " . $e->getMessage());
+    sendError("ошибка сервера: " . $e->getMessage());
 } catch (PDOException $e) {
-    sendError("Ошибка базы данных: " . $e->getMessage());
+    sendError("ошибка бд: " . $e->getMessage());
 }
 ?>

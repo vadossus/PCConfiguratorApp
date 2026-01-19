@@ -346,7 +346,9 @@ class DataManager {
     validateCompatibility(currentBuild) {
         const errors = [];
         const warnings = [];
-        
+        let compatibilityScore = 0;
+        let maxScore = 0;
+
         const getComponentData = (comp) => {
             if (!comp) return null;
             return comp.component || comp;
@@ -363,16 +365,22 @@ class DataManager {
             { type: 'coolers', name: 'Охлаждение', required: false }
         ];
 
-        const selectedCount = componentsToCheck.reduce((count, comp) => {
+        componentsToCheck.forEach(comp => {
             const component = currentBuild[comp.type];
+            
             if (comp.isArray) {
-                return count + (Array.isArray(component) && component.length > 0 ? 1 : 0);
+                if (Array.isArray(component) && component.length > 0) {
+                    maxScore++;
+                    compatibilityScore++;
+                }
             } else {
-                return count + (component ? 1 : 0);
+                if (component) {
+                    maxScore++;
+                    compatibilityScore++;
+                }
             }
-        }, 0);
+        });
 
-        
         if (currentBuild.cpus && currentBuild.motherboards) {
             const cpuData = getComponentData(currentBuild.cpus);
             const mbData = getComponentData(currentBuild.motherboards);
@@ -386,6 +394,7 @@ class DataManager {
                     component2: 'motherboards',
                     message: `Процессор ${cpuData.name} (сокет ${cpuSocket}) не совместим с материнской платой ${mbData.name} (сокет ${mbSocket})`
                 });
+                compatibilityScore--;
             }
         }
 
@@ -402,6 +411,7 @@ class DataManager {
                     component2: 'motherboards',
                     message: `Оперативная память ${ramData.name} (${ramType}) не совместима с материнской платой ${mbData.name} (${mbMemoryType})`
                 });
+                compatibilityScore--;
             }
         }
 
@@ -418,6 +428,7 @@ class DataManager {
                     component2: 'cases',
                     message: `Материнская плата ${mbData.name} (${mbFormFactor}) не поместится в корпус ${caseData.name} (поддерживает: ${caseFormFactors.join(', ')})`
                 });
+                compatibilityScore--;
             }
         }
 
@@ -432,6 +443,7 @@ class DataManager {
                         component2: 'motherboards',
                         message: `Накопитель ${storageData.name} (M.2) требует слот M.2, но материнская плата ${mbData.name} не имеет слотов M.2`
                     });
+                    compatibilityScore--;
                 }
             });
         }
@@ -474,10 +486,20 @@ class DataManager {
                     component2: 'cpus',
                     message: `Охлаждение ${coolerData.name} не совместимо с процессором ${cpuData.name} (сокет ${cpuSocket})`
                 });
+                compatibilityScore--;
             }
         }
 
-        const progress = (selectedCount / componentsToCheck.length) * 100;
+        const selectedCount = componentsToCheck.reduce((count, comp) => {
+            const component = currentBuild[comp.type];
+            if (comp.isArray) {
+                return count + (Array.isArray(component) && component.length > 0 ? 1 : 0);
+            } else {
+                return count + (component ? 1 : 0);
+            }
+        }, 0);
+
+        const progress = maxScore > 0 ? Math.max(0, (compatibilityScore / maxScore) * 100) : 0;
 
         return {
             isValid: errors.length === 0,

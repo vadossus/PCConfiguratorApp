@@ -36,7 +36,6 @@ foreach ($data['components'] as $category => $components) {
 
         $stmt = $db->prepare($query);
 
-
         $name = $component['name'];
         $price = $component['price'];
         $image = $component['image'];
@@ -50,15 +49,11 @@ foreach ($data['components'] as $category => $components) {
         $speed = isset($component['speed']) ? $component['speed'] : null;
         $tdp = isset($component['tdp']) ? $component['tdp'] : null;
         $type = isset($component['type']) ? $component['type'] : null;
-        
-
         $specs = isset($component['specs']) ? json_encode($component['specs']) : json_encode([]);
         $compatibility_flags = isset($component['compatibility_flags']) ? 
                               json_encode($component['compatibility_flags']) : json_encode([]);
         $critical_specs = isset($component['critical_specs']) ? 
                          json_encode($component['critical_specs']) : json_encode([]);
-
-
         $stmt->bindParam(':category_id', $category_id);
         $stmt->bindParam(':name', $name);
         $stmt->bindParam(':price', $price);

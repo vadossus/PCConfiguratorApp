@@ -186,7 +186,6 @@ class AuthManager {
     }
 
     getUserAvatar() {
-        if (!this.currentUser) return '👤';
         const firstLetter = this.currentUser.username.charAt(0).toUpperCase();
         return firstLetter;
     }
@@ -214,7 +213,6 @@ class AuthManager {
                 `;
             }
             
-            // Показываем админку если нужно
             if (this.isAdmin()) {
                 if (adminLink) adminLink.classList.remove('hidden');
             } else {

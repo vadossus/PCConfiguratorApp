@@ -8,30 +8,25 @@ class PCConfiguratorApp {
     }
 
     async init() {
-        try {
-            this.showSplashScreen();
+        this.showSplashScreen();
             
-            this.dataManager = new DataManager();
-            this.authManager = new AuthManager();
+        this.dataManager = new DataManager();
+        this.authManager = new AuthManager();
             
-            await this.preloadData();
+        await this.preloadData();
             
-            this.configurator = new Configurator(this.dataManager, this.authManager);
-            this.modalManager = new ModalManager(this.dataManager, this.configurator);
+        this.configurator = new Configurator(this.dataManager, this.authManager);
+        this.modalManager = new ModalManager(this.dataManager, this.configurator);
             
-            window.modalManager = this.modalManager;
-            window.configurator = this.configurator;
+        window.modalManager = this.modalManager;
+        window.configurator = this.configurator;
                     
-            this.configurator.renderComponentCards();
-            this.configurator.updateCompatibilityStatus();
+        this.configurator.renderComponentCards();
+        this.configurator.updateCompatibilityStatus();
             
-            this.hideSplashScreen();
-            this.bindGlobalEvents();
-            this.initHeroAnimations(); 
-            
-        } catch (error) {
-            this.showError('Не удалось загрузить приложение');
-        }
+        this.hideSplashScreen();
+        this.bindGlobalEvents();
+        this.init_hero_animation();    
     }
 
     async preloadData() {
@@ -40,7 +35,7 @@ class PCConfiguratorApp {
         });
     }
 
-    initHeroAnimations() {
+    init_hero_animation() {
         setTimeout(() => {
             const heroImages = document.querySelectorAll('.image-container');
             heroImages.forEach((img, index) => {
@@ -50,10 +45,10 @@ class PCConfiguratorApp {
             });
         }, 1000);
         
-        this.initParallaxEffect();
+        this.parallax();
     }
 
-    initParallaxEffect() {
+    parallax() {
         const heroImages = document.querySelectorAll('.image-container');
         
         window.addEventListener('scroll', () => {
@@ -143,10 +138,6 @@ class PCConfiguratorApp {
                 behavior: 'smooth'
             });
         });
-    }
-
-    showError(message) {
-        alert(`Ошибка: ${message}`);
     }
 }
 
