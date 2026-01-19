@@ -8,7 +8,7 @@ class PCConfiguratorApp {
     }
 
     async init() {
-        this.showSplashScreen();
+        this.show_splash();
             
         this.dataManager = new DataManager();
         this.authManager = new AuthManager();
@@ -25,7 +25,7 @@ class PCConfiguratorApp {
         this.configurator.updateCompatibilityStatus();
             
         this.hide_splash();
-        this.bindGlobalEvents();
+        this.bind_global_events();
         this.init_hero_animation();    
     }
 
@@ -69,7 +69,7 @@ class PCConfiguratorApp {
         });
     }
 
-    showSplashScreen() {
+    show_splash() {
         const splash = document.createElement('div');
         splash.id = 'splash-screen';
         splash.innerHTML = `
@@ -111,7 +111,7 @@ class PCConfiguratorApp {
         }
     }
 
-    bindGlobalEvents() {
+    bind_global_events() {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.modalManager.hideComponentModal();

@@ -54,6 +54,7 @@ foreach ($data['components'] as $category => $components) {
                               json_encode($component['compatibility_flags']) : json_encode([]);
         $critical_specs = isset($component['critical_specs']) ? 
                          json_encode($component['critical_specs']) : json_encode([]);
+                         
         $stmt->bindParam(':category_id', $category_id);
         $stmt->bindParam(':name', $name);
         $stmt->bindParam(':price', $price);
