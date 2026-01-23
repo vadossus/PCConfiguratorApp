@@ -40,7 +40,7 @@
 
 ## Если это OSPanel:
 * Клоинровать ветку ospanelversion (git clone -b ospanelversion {ссылка на проект}.git)
-* Необходимо запустить скинуть проект в папку OsPanel\home\{название_проекта.local}
+* Необходимо запустить скинуть проект в папку OsPanel\home\\{название_проекта.local}
 * Запустить модули MySQL-8.0, PHP 8.2, Apache
 * Запустить phpMyAdmin и создать базу данных pc_configurator
 * Импортировать файл pc_configurator.sql в одноименную БД
