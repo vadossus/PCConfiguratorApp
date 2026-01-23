@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC Configurator - Собери свой компьютер</title>
+    
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components/header.css">
+    <link rel="stylesheet" href="css/components/hero.css">
+    <link rel="stylesheet" href="css/components/configurator.css">
+    <link rel="stylesheet" href="css/components/modal.css">
+    <link rel="stylesheet" href="css/components/loader.css">
+</head>
+<body>
+    <div id="global-loader" class="loader hidden">
+        <div class="loader-spinner"></div>
+        <div class="loader-text">Проверка совместимости...</div>
+    </div>
+
+    <header class="main-header">
+        <nav class="navbar">
+            <div class="nav-brand">
+                <div class="logo-icon">
+                    <img src="source/site_items/site_icon.png" alt="PC Configurator">
+                </div>
+                <h1>PC Configurator</h1>
+            </div>
+            <ul class="nav-menu" id="nav-menu">
+                <li><a href="#" id="favorites-link" class="hidden">Избранное</a></li>
+                <li><a href="#" id="admin-link" class="hidden">Админ панель</a></li>
+                <li><a href="#" id="login-link">Войти</a></li>
+                <li id="user-info" class="hidden"></li>
+                <li><a href="#" id="logout-link" class="hidden">Выйти</a></li>
+                <li><a href="faq.html" id="faq-link">FAQ</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <section class="hero-section" id="hero">
+        <div class="hero-background">
+            <img src="source/site_items/site_background_.png" alt="Фоновое изображение">
+        </div>
+        <div class="hero-overlay"></div>
+        
+        <div class="hero-content">
+            <h1 class="main-title animate-fade-in-up">
+                Соберите свой компьютер шаг за шагом
+            </h1>
+            <p class="subtitle animate-fade-in-up">
+                Подберите компоненты, проверьте совместимость и получите готовый ПК для игр, работы или творчества
+            </p>
+        </div>
+        
+        <div class="hero-images">
+            <div class="image-container image-main">
+                <img src="source/site_items/pc_1.png" alt="Игровой ПК" class="fade-in">
+            </div>
+            <div class="image-container image-secondary">
+                <img src="source/site_items/pc_2.png" alt="Игровой ПК 2" class="fade-in-delay">
+            </div>
+        </div>
+        <div class="scroll-indicator" onclick="scrollToConfigurator()">
+            Начать сборку
+        </div>
+    </section>
+    <div class="slogan-divider">
+        <div class="slogan-text">Your PC. Your Rules.</div>
+    </div>
+
+    <section class="configurator-section" id="configurator">
+        <div class="configurator-container">
+            <h2 class="configurator-title">Конфигуратор ПК</h2>
+            
+            <div class="configurator-content">
+                <div class="components-column">
+                    <div id="components-table-container"></div>
+                </div>
+                
+                <div class="compatibility-column">
+                    <div class="compatibility-card">
+                        <h3 class="compatibility-title">Статус совместимости</h3>
+                        <div class="compatibility-counter" id="compatibility-count">0/7</div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="progress-bar"></div>
+                        </div>
+                        <p class="compatibility-text" id="compatibility-text">
+                            Начните выбирать компоненты для совместимости
+                        </p>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button id="save-build-btn" class="btn btn-primary">Сохранить сборку</button>
+                        <button id="reset-build-btn" class="btn btn-secondary">Очистить сборку</button>
+                    </div>
+                    
+                    <div class="power-widget">
+                        <div class="power-header" id="power-toggle">
+                            <div class="power-info">
+                                <img src="source/icons/energy_pc_icon.png" alt="Energy" class="power-icon">
+                                <div class="power-text">
+                                    <span class="power-label">Потребление</span>
+                                    <span class="power-total"><span id="total-wattage">0</span> W</span>
+                                </div>
+                            </div>
+                            <div class="power-arrow">
+                                <svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M1 1.5L6 6.5L11 1.5" stroke="#888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div class="power-details" id="power-details">
+                            <div class="power-details-content">
+                                <div id="power-breakdown-list" class="power-list">
+                                    <div class="power-item"><span>База системы</span> <span>50 W</span></div>
+                                </div>
+
+                                <div class="power-divider"></div>
+
+                                <label class="power-checkbox">
+                                    <input type="checkbox" id="overclock-check">
+                                    <span class="checkmark"></span>
+                                    <span class="label-text">Разгон системы (+20%)</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div id="component-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Выберите компонент</h3>
+                <span class="close-button">&times;</span>
+            </div>
+            <div class="modal-body" id="modal-body">
+            </div>
+        </div>
+    </div>
+
+    <div id="auth-modal" class="modal hidden">
+        <div class="modal-content auth-modal">
+            <div class="modal-header">
+                <h3 id="auth-title">Вход в систему</h3>
+                <span class="close-button">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="auth-form" class="auth-form">
+                    <div class="form-group">
+                        <label for="username">Имя пользователя:</label>
+                        <input type="text" id="username" name="username" required 
+                            placeholder="Введите имя пользователя">
+                    </div>
+                    
+                    <div id="register-fields" class="hidden">
+                        <div class="form-group">
+                            <label for="email">Email:</label>
+                            <input type="email" id="email" name="email" 
+                                placeholder="Введите email">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password">Пароль:</label>
+                        <input type="password" id="password" name="password" required 
+                            placeholder="Введите пароль">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-block" id="auth-submit">
+                        Войти
+                    </button>
+                    
+                    <div class="auth-actions">
+                        <button type="button" class="btn-link" id="switch-to-register">
+                            Нет аккаунта? Зарегистрироваться
+                        </button>
+                        <button type="button" class="btn-link hidden" id="switch-to-login">
+                            Уже есть аккаунт? Войти
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="auth-message" class="auth-message"></div>
+                
+                <div id="auth-loading" class="auth-loading hidden">
+                    <div class="spinner"></div>
+                    <p>Проверяем данные...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="scroll-top" onclick="scrollToTop()">↑</div>
+
+    <div id="favorites-modal" class="modal hidden">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h3>Мои сборки</h3>
+                <span class="close-button">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="favorites-loading" class="hidden">
+                    <div class="spinner"></div>
+                    <p>Загрузка ваших сборок...</p>
+                </div>
+                <div id="favorites-grid" class="builds-grid">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/pagination-manager.js"></script>
+    <script src="js/data-manager.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/modal-manager.js"></script>
+    <script src="js/configurator.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/app.js"></script>
+
+</body>
+</html>
