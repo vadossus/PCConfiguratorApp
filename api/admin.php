@@ -12,7 +12,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit;
 }
 
-$host = 'MySQL-8.0'; // localhost - если это XAMPP
+$host = 'localhost'; // MySQL-8.0 - если это OSPanel
 $dbname = 'pc_configurator';
 $username = 'root';
 $password = '';
