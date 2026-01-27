@@ -5,6 +5,7 @@ class ModalManager {
         this.currentComponentType = null;
         this.currentFilters = {};
         this.currentPage = 1;
+        this.itemsPerPage = 5;
         
         this.categoryMapping = {
             'cpus': 'cpus',
@@ -112,7 +113,12 @@ class ModalManager {
     async loadComponentPage(componentType, page = 1, filters = {}) {
         try {
             
-            const pageData = await this.dataManager.getComponentsPage(componentType, page, filters);
+            const pageData = await this.dataManager.getComponentsPage(
+                componentType, 
+                page, 
+                filters, 
+                this.itemsPerPage
+            );
             
             if (!pageData) {
                 return;
@@ -130,6 +136,10 @@ class ModalManager {
                 components = pageData.data;
             }
             
+
+            if (components.length > this.itemsPerPage) {
+                components = components.slice(0, this.itemsPerPage);
+            }
             
             components = components.map(component => {
                 const isCompatible = this.checkCompatibility(component);
@@ -139,12 +149,12 @@ class ModalManager {
                 };
             });
             
-            this.renderComponents(components, {
+             this.renderComponents(components, {
                 currentPage: pageData.currentPage || page,
-                totalPages: pageData.totalPages || 1,
+                totalPages: pageData.totalPages || Math.ceil(components.length / this.itemsPerPage) || 1,
                 totalItems: pageData.totalItems || components.length,
-                hasNext: pageData.hasNext || false,
-                hasPrev: pageData.hasPrev || false
+                hasNext: pageData.hasNext || (page < (pageData.totalPages || 1)),
+                hasPrev: pageData.hasPrev || (page > 1)
             });
             
         } catch (error) {
@@ -174,7 +184,7 @@ class ModalManager {
         
         html += `
                 <div class="components-list-info">
-                    Найдено: ${components.length} компонентов
+                    Найдено: ${pageData.totalItems} компонентов
                 </div>
                 
                 <div class="components-grid" id="modal-components-list">
@@ -215,13 +225,15 @@ class ModalManager {
                 </div>
         `;
         
-        if (pageData.totalPages > 1) {
+        if (pageData.totalItems > 0) {
             html += this.renderPagination(pageData);
         }
         
         html += `</div>`;
         
         modalBody.innerHTML = html;
+
+        this.currentPage = pageData.currentPage || this.currentPage;
         
         const searchInput = document.getElementById('modal-search-input');
         if (searchInput) {
@@ -484,17 +496,17 @@ class ModalManager {
                 <button class="btn-pagination ${!pageData.hasPrev ? 'disabled' : ''}" 
                         onclick="window.modalManager.prevPage()" 
                         ${!pageData.hasPrev ? 'disabled' : ''}>
-                    ← Назад
+                    ←
                 </button>
                 
                 <span class="page-info">
-                    Страница ${pageData.currentPage} из ${pageData.totalPages}
+                    ${pageData.currentPage} из ${pageData.totalPages}
                 </span>
                 
                 <button class="btn-pagination ${!pageData.hasNext ? 'disabled' : ''}" 
                         onclick="window.modalManager.nextPage()" 
                         ${!pageData.hasNext ? 'disabled' : ''}>
-                    Далее →
+                    →
                 </button>
             </div>
         `;

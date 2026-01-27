@@ -727,8 +727,8 @@ class AdminPanel {
                         <div>
                             <strong>${this.escapeHtml(component.name)}</strong>
                             <div class="text-muted small">
-                                ${this.escapeHtml(component.description || '').substring(0, 100)}
-                                ${component.description && component.description.length > 100 ? '...' : ''}
+                                ${this.escapeHtml(component.description || '').substring(0, 50)}
+                                ${component.description && component.description.length > 50 ? '...' : ''}
                             </div>
                         </div>
                     </div>
@@ -743,7 +743,7 @@ class AdminPanel {
                 <td class="text-right">${this.formatPrice(component.price)} ₽</td>
                 <td>
                     <span class="status-badge ${component.is_active ? 'active' : 'inactive'}">
-                        ${component.is_active ? '✓ Активен' : '✗ Не активен'}
+                        ${component.is_active ? 'Активен' : 'Не активен'}
                     </span>
                 </td>
                 <td>
@@ -751,11 +751,12 @@ class AdminPanel {
                         <button class="btn btn-sm btn-outline-primary" 
                                 onclick="adminPanel.editComponent(${component.id})" 
                                 title="Редактировать">
+                            Редактировать
                         </button>
                         <button class="btn btn-sm btn-outline-danger" 
                                 onclick="adminPanel.deleteComponent(${component.id})" 
                                 title="Удалить">
-                            🗑️
+                            Удалить
                         </button>
                         <button class="btn btn-sm btn-outline-secondary" 
                                 onclick="adminPanel.toggleComponent(${component.id}, ${component.is_active})" 

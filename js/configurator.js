@@ -2081,15 +2081,15 @@ class Configurator {
                     const factorUpper = factor.toUpperCase();
                     if (factorUpper === mbFormFactor) return true;
                     
-                    const compatibilityHierarchy = {
+                    const compatibility_erarxiya = {
                         'E-ATX': ['E-ATX', 'ATX', 'MICRO-ATX', 'MINI-ITX'],
                         'ATX': ['ATX', 'MICRO-ATX', 'MINI-ITX'],
                         'MICRO-ATX': ['MICRO-ATX', 'MINI-ITX'],
                         'MINI-ITX': ['MINI-ITX']
                     };
                     
-                    if (compatibilityHierarchy[factorUpper]) {
-                        return compatibilityHierarchy[factorUpper].includes(mbFormFactor);
+                    if (compatibility_erarxiya[factorUpper]) {
+                        return compatibility_erarxiya[factorUpper].includes(mbFormFactor);
                     }
                     
                     return false;
