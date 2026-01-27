@@ -12,7 +12,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit;
 }
 
-$host = 'localhost';
+$host = 'My-SQL8.0';
 $dbname = 'pc_configurator';
 $username = 'root';
 $password = '';
