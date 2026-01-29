@@ -463,6 +463,27 @@ class Configurator {
             
             const componentTypes = ['cpus', 'motherboards', 'rams', 'gpus', 'storages', 'psus', 'cases', 'coolers'];
             
+<<<<<<< HEAD
+=======
+            let selectedCount = 0;
+            const totalCount = 8;
+            
+            for (const type of componentTypes) {
+                const component = this.currentBuild[type];
+                if (type === 'storages') {
+                    if (Array.isArray(component) && component.length > 0) {
+                        selectedCount++;
+                    }
+                } else if (component !== null && component !== undefined) {
+                    selectedCount++;
+                }
+            }
+            
+            this.compatibilityStatus.selectedCount = selectedCount;
+            this.compatibilityStatus.totalCount = totalCount;
+            this.compatibilityStatus.progress = (selectedCount / totalCount) * 100;
+            
+>>>>>>> 0a8b963 (Обновление полного проекта)
             this.compatibilityStatus.errors = [];
             this.compatibilityStatus.warnings = [];
             
@@ -570,6 +591,7 @@ class Configurator {
     calculateTotalPrice() {
         let total = 0;
         
+<<<<<<< HEAD
         Object.values(this.currentBuild).forEach(component => {
             if (Array.isArray(component)) {
                 component.forEach(item => {
@@ -577,6 +599,19 @@ class Configurator {
                 });
             } else if (component && component.price) {
                 total += component.price;
+=======
+        Object.keys(this.currentBuild).forEach(type => {
+            const item = this.currentBuild[type];
+            
+            if (!item) return; 
+
+            if (type === 'storages' && Array.isArray(item)) {
+                item.forEach(storage => {
+                    total += parseFloat(storage.price || 0);
+                });
+            } else {
+                total += parseFloat(item.price || 0);
+>>>>>>> 0a8b963 (Обновление полного проекта)
             }
         });
         
@@ -1295,8 +1330,12 @@ class Configurator {
         return map[componentType] || 0;
     }
 
+<<<<<<< HEAD
     loadSavedBuild(buildId) {
 
+=======
+    async loadSavedBuild(buildId) {
+>>>>>>> 0a8b963 (Обновление полного проекта)
         const build = this.cachedBuilds?.find(b => b.id == buildId);
         
         if (!build) {
@@ -1321,11 +1360,17 @@ class Configurator {
                 }
             }
             
+<<<<<<< HEAD
+=======
+            let inactiveComponents = [];
+            let hasComponents = false;
+>>>>>>> 0a8b963 (Обновление полного проекта)
             
             if (components && typeof components === 'object') {
                 for (const [type, componentData] of Object.entries(components)) {
                     if (!componentData) continue;
                     
+<<<<<<< HEAD
                     
                     if (type === 'storages' && Array.isArray(componentData)) {
                         this.currentBuild[type] = componentData.map(item => this.normal_component(item, type));
@@ -1346,11 +1391,79 @@ class Configurator {
             
         } catch (error) {
             this.showMessage(`${error.message}`, 'error');
+=======
+                    if (type === 'storages' && Array.isArray(componentData)) {
+                        const activeStorages = [];
+                        for (const item of componentData) {
+                            const normalized = this.normal_component(item, type);
+                            activeStorages.push(normalized);
+                            const isActive = await this.checkComponentActivity(item.id, type);
+                            if (!isActive) {
+                                inactiveComponents.push({
+                                    type: type,
+                                    name: normalized.name,
+                                    id: item.id
+                                });
+                            }
+                        }
+                        if (activeStorages.length > 0) {
+                            this.currentBuild[type] = activeStorages;
+                            hasComponents = true;
+                        }
+                    } else if (componentData && componentData.id) {
+                        const normalized = this.normal_component(componentData, type);
+                        this.currentBuild[type] = normalized;
+                        hasComponents = true;
+                        const isActive = await this.checkComponentActivity(componentData.id, type);
+                        if (!isActive) {
+                            inactiveComponents.push({
+                                type: type,
+                                name: normalized.name,
+                                id: componentData.id
+                            });
+                        }
+                    }
+                }
+            }
+            
+            this.saveBuildToStorage();
+            this.calculate_power();
+            this.renderComponentCards();
+            this.updateCompatibilityStatus();
+            
+            this.showMessage(`Сборка "${build.name}" загружена!`, 'success');
+            
+            const modal = document.getElementById('favorites-modal');
+            if (modal) modal.classList.add('hidden');
+            
+        } catch (error) {
+            this.showMessage(`Ошибка загрузки: ${error.message}`, 'error');
+>>>>>>> 0a8b963 (Обновление полного проекта)
         } finally {
             this.hideLoader();
         }
     }
 
+<<<<<<< HEAD
+=======
+    async checkComponentActivity(componentId, componentType) {
+        try {
+            const response = await fetch(`api/admin.php?action=check_component_activity&id=${componentId}&type=${componentType}`);
+            if (!response.ok) {
+                return true;
+            }
+            
+            const data = await response.json();
+            if (data.success) {
+                return data.is_active !== false; 
+            }
+            return false;
+        } catch (error) {
+            return false;
+        }
+    }
+
+>>>>>>> 0a8b963 (Обновление полного проекта)
     async getComponentFromDatabase(componentId, componentType) {
         try {
             const tableMap = {
@@ -1394,6 +1507,10 @@ class Configurator {
             speed: component.speed || '',
             tdp: component.tdp || 0,
             type: component.type || '',
+<<<<<<< HEAD
+=======
+            is_active: component.is_active !== undefined ? component.is_active : 1, 
+>>>>>>> 0a8b963 (Обновление полного проекта)
             
             critical_specs: this.parseJSONField(component.critical_specs, []),
             compatibility_flags: this.parseJSONField(component.compatibility_flags, []),
@@ -1446,8 +1563,19 @@ class Configurator {
     }
 
     get_Status(componentType, componentData) {
+<<<<<<< HEAD
         if (!this.compatibilityStatus) return 'unknown';
         
+=======
+        if (!componentData) return 'unknown';
+        
+        if (componentData.is_active === 0) {
+            return 'inactive'; 
+        }
+
+        if (!this.compatibilityStatus) return 'success';
+            
+>>>>>>> 0a8b963 (Обновление полного проекта)
         if (this.compatibilityStatus.isValid && !this.compatibilityStatus.hasWarnings) {
             return 'success';
         }
@@ -1569,7 +1697,10 @@ class Configurator {
         }
     }
 
+<<<<<<< HEAD
     
+=======
+>>>>>>> 0a8b963 (Обновление полного проекта)
 
     updateComponentStatuses() {
         const componentTypes = ['cpus', 'motherboards', 'rams', 'gpus', 'psus', 'cases', 'coolers'];
@@ -1581,7 +1712,11 @@ class Configurator {
                 if (container) {
                     const selectedView = container.querySelector('.selected-component-view');
                     if (selectedView) {
+<<<<<<< HEAD
                         const status = this.get_error_compability(type, component);
+=======
+                        const status = this.get_Status(type, component);
+>>>>>>> 0a8b963 (Обновление полного проекта)
                         selectedView.className = `selected-component-view ${status}`;
                         
                         const statusElement = selectedView.querySelector('.selected-component-status');
@@ -1600,7 +1735,11 @@ class Configurator {
                 if (container) {
                     const storageViews = container.querySelectorAll('.selected-component-view');
                     if (storageViews[index]) {
+<<<<<<< HEAD
                         const status = this.getComponentStatusFromCompatibilityErrors('storages', storage);
+=======
+                        const status = this.get_Status('storages', storage);
+>>>>>>> 0a8b963 (Обновление полного проекта)
                         storageViews[index].className = `selected-component-view ${status}`;
                         
                         const statusElement = storageViews[index].querySelector('.selected-component-status');
@@ -1619,6 +1758,10 @@ class Configurator {
             case 'success': return '✓';
             case 'warning': return '⚠';
             case 'error': return '✗';
+<<<<<<< HEAD
+=======
+            case 'inactive': return '⚠'
+>>>>>>> 0a8b963 (Обновление полного проекта)
             default: return '?';
         }
     }
@@ -1628,6 +1771,10 @@ class Configurator {
             case 'success': return 'Компонент совместим с остальной сборкой';
             case 'warning': return 'Есть предупреждение по совместимости. Проверьте спецификации.';
             case 'error': return 'Компонент несовместим с другими компонентами сборки';
+<<<<<<< HEAD
+=======
+            case 'inactive': return 'Компонент не активен. Возможно, он удалён или временно недоступен.';
+>>>>>>> 0a8b963 (Обновление полного проекта)
             default: return 'Статус совместимости не определен';
         }
     }
@@ -2081,15 +2228,24 @@ class Configurator {
                     const factorUpper = factor.toUpperCase();
                     if (factorUpper === mbFormFactor) return true;
                     
+<<<<<<< HEAD
                     const compatibilityHierarchy = {
+=======
+                    const compatibility_erarxiya = {
+>>>>>>> 0a8b963 (Обновление полного проекта)
                         'E-ATX': ['E-ATX', 'ATX', 'MICRO-ATX', 'MINI-ITX'],
                         'ATX': ['ATX', 'MICRO-ATX', 'MINI-ITX'],
                         'MICRO-ATX': ['MICRO-ATX', 'MINI-ITX'],
                         'MINI-ITX': ['MINI-ITX']
                     };
                     
+<<<<<<< HEAD
                     if (compatibilityHierarchy[factorUpper]) {
                         return compatibilityHierarchy[factorUpper].includes(mbFormFactor);
+=======
+                    if (compatibility_erarxiya[factorUpper]) {
+                        return compatibility_erarxiya[factorUpper].includes(mbFormFactor);
+>>>>>>> 0a8b963 (Обновление полного проекта)
                     }
                     
                     return false;

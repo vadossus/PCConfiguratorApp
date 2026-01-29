@@ -12,6 +12,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit;
 }
 
+<<<<<<< HEAD
 $host = 'localhost'; // MySQL-8.0 - если это OSPanel
 $dbname = 'pc_configurator';
 $username = 'root';
@@ -22,6 +23,15 @@ try {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch(PDOException $e) {
     echo json_encode(['success' => false, 'message' => 'ошибка подключения к БД: ' . $e->getMessage()]);
+=======
+include_once __DIR__ . '/../config/database.php';
+
+$database = new Database();
+$db = $database->getConnection();
+
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    echo json_encode(['success' => false, 'message' => 'Доступ запрещен']);
+>>>>>>> 0a8b963 (Обновление полного проекта)
     exit;
 }
 
@@ -29,6 +39,7 @@ $action = $_GET['action'] ?? '';
 $input = json_decode(file_get_contents('php://input'), true);
 switch($action) {
     case 'get_count':
+<<<<<<< HEAD
         getCount($pdo);
         break;
     case 'get_components':
@@ -69,6 +80,79 @@ switch($action) {
         break;
     case 'get_activities':
         getActivities($pdo);
+=======
+        getCount($db);
+        break;
+    case 'get_components':
+        getComponents($db);
+        break;
+    case 'get_users':
+        getUsers($db);
+        break;
+    case 'get_builds':
+        getBuilds($db);
+        break;
+    case 'add_component':
+        addComponent($db, $input);
+        break;
+    case 'update_user_role':
+        updateUserRole($db, $input);
+        break;
+    case 'delete_component':
+        deleteComponent($db, $input);
+        break;
+    case 'delete_user':
+        deleteUser($db, $input);
+        break;
+    case 'toggle_component':
+        toggleComponent($db, $input);
+        break;
+    case 'update_component':
+        updateComponent($db, $input);
+        break;
+    case 'get_component':
+        getComponent($db);
+        break;
+    case 'delete_build':
+        deleteBuild($db, $input);
+        break;
+    case 'log_activity':
+        logActivity($db, $input);
+        break;
+    case 'get_activities':
+        getActivities($db);
+        break;
+    case 'check_component_activity':
+        $componentId = $_GET['id'] ?? 0;
+        $componentType = $_GET['type'] ?? '';
+        if (!$componentId || !$componentType) {
+            echo json_encode(['success' => false, 'message' => 'Не указаны параметры']);
+            exit;
+        }
+        $tableMap = [
+            'cpus' => 'cpus',
+            'motherboards' => 'motherboards',
+            'rams' => 'rams',
+            'gpus' => 'gpus',
+            'storages' => 'storages',
+            'psus' => 'psus',
+            'cases' => 'cases',
+            'coolers' => 'coolers'
+        ];
+        $table = $tableMap[$componentType] ?? '';
+        if (!$table) {
+            echo json_encode(['success' => false, 'message' => 'Неизвестный тип компонента']);
+            exit;
+        }
+        $stmt = $pdo->prepare("SELECT is_active FROM {$table} WHERE id = ?");
+        $stmt->execute([$componentId]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($result) {
+            echo json_encode(['success' => true, 'is_active' => $result['is_active'] == 1]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Компонент не найден']);
+        }
+>>>>>>> 0a8b963 (Обновление полного проекта)
         break;
     default:
         echo json_encode(['success' => false, 'message' => 'Неизвестное действие: ' . $action]);
@@ -427,6 +511,7 @@ function deleteComponent($pdo, $data) {
     }
     
     try {
+<<<<<<< HEAD
         $stmt = $pdo->query("SHOW COLUMNS FROM components LIKE 'is_active'");
         if ($stmt->rowCount() > 0) {
             $stmt = $pdo->prepare("UPDATE components SET is_active = 0 WHERE id = ?");
@@ -439,6 +524,18 @@ function deleteComponent($pdo, $data) {
         echo json_encode(['success' => true, 'message' => 'Компонент удален']);
     } catch(Exception $e) {
         echo json_encode(['success' => false, 'message' => 'Ошибка удаления компонента: ' . $e->getMessage()]);
+=======
+        $stmt = $pdo->prepare("DELETE FROM components WHERE id = ?");
+        $stmt->execute([$data['id']]);
+        
+        if ($stmt->rowCount() > 0) {
+            echo json_encode(['success' => true, 'message' => 'Компонент полностью удален из базы']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Компонент не найден']);
+        }
+    } catch(Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Ошибка: ' . $e->getMessage()]);
+>>>>>>> 0a8b963 (Обновление полного проекта)
     }
 }
 
@@ -482,10 +579,15 @@ function getComponent($pdo) {
     try {
         $category = $_GET['category'] ?? null;
         $search = $_GET['search'] ?? null;
+<<<<<<< HEAD
+=======
+        $isActive = $_GET['is_active'] ?? null; 
+>>>>>>> 0a8b963 (Обновление полного проекта)
         $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
         $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
         $offset = ($page - 1) * $limit;
         
+<<<<<<< HEAD
         $query = "SELECT c.*, cat.slug as category_slug, cat.name as category_name 
                  FROM components c 
                  LEFT JOIN component_categories cat ON c.category_id = cat.id 
@@ -496,17 +598,30 @@ function getComponent($pdo) {
         
         if ($category && $category !== 'all') {
             $query .= " AND cat.slug = ?";
+=======
+        $where = " WHERE 1=1";
+        $params = [];
+        $types = [];
+
+        if ($category && $category !== 'all') {
+            $where .= " AND cat.slug = ?";
+>>>>>>> 0a8b963 (Обновление полного проекта)
             $params[] = $category;
             $types[] = 's';
         }
         
         if ($search) {
+<<<<<<< HEAD
             $query .= " AND (c.name LIKE ? OR c.description LIKE ?)";
+=======
+            $where .= " AND (c.name LIKE ? OR c.description LIKE ?)";
+>>>>>>> 0a8b963 (Обновление полного проекта)
             $params[] = "%$search%";
             $params[] = "%$search%";
             $types[] = 's';
             $types[] = 's';
         }
+<<<<<<< HEAD
         
         $sortBy = $_GET['sort'] ?? 'c.created_at';
         $sortOrder = $_GET['order'] ?? 'desc';
@@ -526,10 +641,58 @@ function getComponent($pdo) {
                 case 'i': $stmt->bindValue($i+1, $param, PDO::PARAM_INT); break;
                 default: $stmt->bindValue($i+1, $param, PDO::PARAM_STR);
             }
+=======
+
+        if ($isActive !== null && $isActive !== '') {
+            $where .= " AND c.is_active = ?";
+            $params[] = (int)$isActive;
+            $types[] = 'i';
+        }
+
+        $countQuery = "SELECT COUNT(*) as total FROM components c 
+                      LEFT JOIN component_categories cat ON c.category_id = cat.id" . $where;
+        $countStmt = $pdo->prepare($countQuery);
+        foreach($params as $i => $param) {
+            $countStmt->bindValue($i + 1, $param);
+        }
+        $countStmt->execute();
+        $total = (int)($countStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+
+
+        $sortBy = $_GET['sort'] ?? 'c.created_at';
+        $sortOrder = $_GET['order'] ?? 'desc';
+        
+  
+        $allowedSort = ['id', 'name', 'price', 'c.created_at', 'is_active'];
+        if (!in_array($sortBy, $allowedSort)) $sortBy = 'c.created_at';
+        if (!in_array(strtolower($sortOrder), ['asc', 'desc'])) $sortOrder = 'desc';
+
+        $query = "SELECT c.*, cat.slug as category_slug, cat.name as category_name 
+                  FROM components c 
+                  LEFT JOIN component_categories cat ON c.category_id = cat.id 
+                  $where 
+                  ORDER BY $sortBy $sortOrder 
+                  LIMIT ? OFFSET ?";
+        
+
+        $finalParams = $params;
+        $finalParams[] = $limit;
+        $finalParams[] = $offset;
+        
+        $finalTypes = $types;
+        $finalTypes[] = 'i';
+        $finalTypes[] = 'i';
+
+        $stmt = $pdo->prepare($query);
+        foreach($finalParams as $i => $param) {
+            $type = $finalTypes[$i] ?? 's';
+            $stmt->bindValue($i + 1, $param, $type === 'i' ? PDO::PARAM_INT : PDO::PARAM_STR);
+>>>>>>> 0a8b963 (Обновление полного проекта)
         }
         
         $stmt->execute();
         $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
+<<<<<<< HEAD
         
         $countQuery = "SELECT COUNT(*) as total 
                       FROM components c 
@@ -558,6 +721,9 @@ function getComponent($pdo) {
         $totalResult = $countStmt->fetch(PDO::FETCH_ASSOC);
         $total = $totalResult['total'] ?? 0;
         
+=======
+
+>>>>>>> 0a8b963 (Обновление полного проекта)
         foreach($components as &$component) {
             $component = processComponentJSON($component);
         }
@@ -576,7 +742,11 @@ function getComponent($pdo) {
     } catch(Exception $e) {
         echo json_encode([
             'success' => false, 
+<<<<<<< HEAD
             'message' => 'Ошибка загрузки компонентов: ' . $e->getMessage(), 
+=======
+            'message' => 'Ошибка: ' . $e->getMessage(),
+>>>>>>> 0a8b963 (Обновление полного проекта)
             'components' => []
         ]);
     }
@@ -846,4 +1016,8 @@ function getActivityIconFromType($actionType) {
     return $iconMap[$actionType] ?? '📝';
 }
 ob_end_flush();
+<<<<<<< HEAD
 ?>
+=======
+?>
+>>>>>>> 0a8b963 (Обновление полного проекта)

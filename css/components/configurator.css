@@ -895,4 +895,41 @@
     color: #9ca3af !important;
     cursor: not-allowed;
     border-color: #4b5563 !important;
+<<<<<<< HEAD
+=======
+}
+
+.selected-component-view.inactive {
+    border-left: 4px solid #6c757d;
+    background: #f8f9fa;
+    opacity: 0.7;
+}
+
+.selected-component-view.inactive .selected-component-image {
+    filter: grayscale(100%);
+}
+
+.selected-component-view.inactive .selected-component-name {
+    color: #6c757d;
+    text-decoration: line-through;
+}
+
+.selected-component-view.inactive .selected-component-status {
+    background: #6c757d;
+    color: white;
+    border: 1px solid #5a6268;
+}
+
+.selected-component-view.inactive .selected-component-price {
+    color: #6c757d;
+}
+
+.selected-component-view.inactive .btn-remove-selected {
+    background: #6c757d;
+    border-color: #545b62;
+}
+
+.selected-component-view.inactive .btn-remove-selected:hover {
+    background: #545b62;
+>>>>>>> 0a8b963 (Обновление полного проекта)
 }

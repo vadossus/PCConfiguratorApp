@@ -34,7 +34,11 @@ class DataManager {
             const params = new URLSearchParams();
             params.append('category', apiCategory);
             params.append('page', page);
+<<<<<<< HEAD
             params.append('limit', 10);
+=======
+            params.append('limit', 5);
+>>>>>>> 0a8b963 (Обновление полного проекта)
             
             if (this.shouldApplyFilter(componentType, 'search', filters.search)) {
                 params.append('search', filters.search);
@@ -110,7 +114,11 @@ class DataManager {
                 totalItems: totalItems,
                 hasNext: page < totalPages,
                 hasPrev: page > 1,
+<<<<<<< HEAD
                 itemsPerPage: 10
+=======
+                itemsPerPage: 5
+>>>>>>> 0a8b963 (Обновление полного проекта)
             };
             
         } catch (error) {
@@ -137,7 +145,11 @@ class DataManager {
     }
 
     getFallbackComponents(componentType, page, filters) {
+<<<<<<< HEAD
         const testData = this.getTestComponents(componentType);
+=======
+        const testData = [];
+>>>>>>> 0a8b963 (Обновление полного проекта)
         
         let filteredComponents = testData;
         
@@ -174,6 +186,7 @@ class DataManager {
         };
     }
 
+<<<<<<< HEAD
     getTestComponents(componentType) {
         const testData = {
             cpus: [
@@ -292,6 +305,8 @@ class DataManager {
         return testData[componentType] || [];
     }
 
+=======
+>>>>>>> 0a8b963 (Обновление полного проекта)
     async getComponentDetails(componentId, componentType) {
         const cacheKey = `${componentType}_${componentId}`;
         
@@ -319,8 +334,12 @@ class DataManager {
             } else if (data.id && data.name) {
                 component = data;
             } else {
+<<<<<<< HEAD
                 const testData = this.getTestComponents(componentType + 's');
                 component = testData.find(comp => comp.id === componentId);
+=======
+                component = null;
+>>>>>>> 0a8b963 (Обновление полного проекта)
             }
             
             if (component) {
@@ -330,8 +349,12 @@ class DataManager {
             
             return null;
         } catch (error) {
+<<<<<<< HEAD
             const testData = this.getTestComponents(componentType + 's');
             return testData.find(comp => comp.id === componentId) || null;
+=======
+            return null;
+>>>>>>> 0a8b963 (Обновление полного проекта)
         }
     }
 
@@ -768,6 +791,7 @@ class DataManager {
         
         return specs.slice(0, 3);
     }
+<<<<<<< HEAD
 
     async testAPIConnection() {
         try {
@@ -782,6 +806,8 @@ class DataManager {
             return false;
         }
     }
+=======
+>>>>>>> 0a8b963 (Обновление полного проекта)
 }
 
 if (typeof window !== 'undefined') {

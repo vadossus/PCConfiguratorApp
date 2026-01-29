@@ -5,6 +5,10 @@ class ModalManager {
         this.currentComponentType = null;
         this.currentFilters = {};
         this.currentPage = 1;
+<<<<<<< HEAD
+=======
+        this.itemsPerPage = 5;
+>>>>>>> 0a8b963 (Обновление полного проекта)
         
         this.categoryMapping = {
             'cpus': 'cpus',
@@ -112,7 +116,16 @@ class ModalManager {
     async loadComponentPage(componentType, page = 1, filters = {}) {
         try {
             
+<<<<<<< HEAD
             const pageData = await this.dataManager.getComponentsPage(componentType, page, filters);
+=======
+            const pageData = await this.dataManager.getComponentsPage(
+                componentType, 
+                page, 
+                filters, 
+                this.itemsPerPage
+            );
+>>>>>>> 0a8b963 (Обновление полного проекта)
             
             if (!pageData) {
                 return;
@@ -130,6 +143,13 @@ class ModalManager {
                 components = pageData.data;
             }
             
+<<<<<<< HEAD
+=======
+
+            if (components.length > this.itemsPerPage) {
+                components = components.slice(0, this.itemsPerPage);
+            }
+>>>>>>> 0a8b963 (Обновление полного проекта)
             
             components = components.map(component => {
                 const isCompatible = this.checkCompatibility(component);
@@ -139,12 +159,21 @@ class ModalManager {
                 };
             });
             
+<<<<<<< HEAD
             this.renderComponents(components, {
                 currentPage: pageData.currentPage || page,
                 totalPages: pageData.totalPages || 1,
                 totalItems: pageData.totalItems || components.length,
                 hasNext: pageData.hasNext || false,
                 hasPrev: pageData.hasPrev || false
+=======
+             this.renderComponents(components, {
+                currentPage: pageData.currentPage || page,
+                totalPages: pageData.totalPages || Math.ceil(components.length / this.itemsPerPage) || 1,
+                totalItems: pageData.totalItems || components.length,
+                hasNext: pageData.hasNext || (page < (pageData.totalPages || 1)),
+                hasPrev: pageData.hasPrev || (page > 1)
+>>>>>>> 0a8b963 (Обновление полного проекта)
             });
             
         } catch (error) {
@@ -174,7 +203,11 @@ class ModalManager {
         
         html += `
                 <div class="components-list-info">
+<<<<<<< HEAD
                     Найдено: ${components.length} компонентов
+=======
+                    Найдено: ${pageData.totalItems} компонентов
+>>>>>>> 0a8b963 (Обновление полного проекта)
                 </div>
                 
                 <div class="components-grid" id="modal-components-list">
@@ -215,13 +248,22 @@ class ModalManager {
                 </div>
         `;
         
+<<<<<<< HEAD
         if (pageData.totalPages > 1) {
+=======
+        if (pageData.totalItems > 0) {
+>>>>>>> 0a8b963 (Обновление полного проекта)
             html += this.renderPagination(pageData);
         }
         
         html += `</div>`;
         
         modalBody.innerHTML = html;
+<<<<<<< HEAD
+=======
+
+        this.currentPage = pageData.currentPage || this.currentPage;
+>>>>>>> 0a8b963 (Обновление полного проекта)
         
         const searchInput = document.getElementById('modal-search-input');
         if (searchInput) {
@@ -484,17 +526,29 @@ class ModalManager {
                 <button class="btn-pagination ${!pageData.hasPrev ? 'disabled' : ''}" 
                         onclick="window.modalManager.prevPage()" 
                         ${!pageData.hasPrev ? 'disabled' : ''}>
+<<<<<<< HEAD
                     ← Назад
                 </button>
                 
                 <span class="page-info">
                     Страница ${pageData.currentPage} из ${pageData.totalPages}
+=======
+                    ←
+                </button>
+                
+                <span class="page-info">
+                    ${pageData.currentPage} из ${pageData.totalPages}
+>>>>>>> 0a8b963 (Обновление полного проекта)
                 </span>
                 
                 <button class="btn-pagination ${!pageData.hasNext ? 'disabled' : ''}" 
                         onclick="window.modalManager.nextPage()" 
                         ${!pageData.hasNext ? 'disabled' : ''}>
+<<<<<<< HEAD
                     Далее →
+=======
+                    →
+>>>>>>> 0a8b963 (Обновление полного проекта)
                 </button>
             </div>
         `;
