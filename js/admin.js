@@ -38,6 +38,7 @@ class AdminPanel {
             category: 'all',
             search: '',
             sortBy: 'id',
+            status: 'all',
             sortOrder: 'desc',
             page: 1,
             limit: 10
@@ -98,6 +99,7 @@ class AdminPanel {
         const typeFilter = document.getElementById('component-type-filter');
         const searchInput = document.getElementById('component-search');
         const sortSelect = document.getElementById('component-sort');
+        const statusFilter = document.getElementById('component-status');
         
         if (typeFilter) {
             typeFilter.addEventListener('change', (e) => {
@@ -122,6 +124,14 @@ class AdminPanel {
                 this.filters.sortBy = sortBy;
                 this.filters.sortOrder = sortOrder;
                 this.applyFilters();
+            });
+        }
+
+        if (statusFilter) {
+            statusFilter.addEventListener('change', (e) => {
+                this.filters.status = e.target.value;
+                this.filters.page = 1;
+                this.loadComponents();
             });
         }
     }
@@ -441,6 +451,10 @@ class AdminPanel {
             if (this.filters.sortBy) {
                 params.append('sort', this.filters.sortBy);
                 params.append('order', this.filters.sortOrder);
+            }
+
+            if (this.filters.status && this.filters.status !== 'all') {
+                params.append('is_active', this.filters.status === 'active' ? '1' : '0');
             }
             
             const response = await fetch(`${this.API_BASE_URL}get_component&${params.toString()}`);

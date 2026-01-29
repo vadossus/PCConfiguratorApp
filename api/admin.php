@@ -508,82 +508,78 @@ function getComponent($pdo) {
     try {
         $category = $_GET['category'] ?? null;
         $search = $_GET['search'] ?? null;
+        $isActive = $_GET['is_active'] ?? null; 
         $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
         $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
         $offset = ($page - 1) * $limit;
         
-        $query = "SELECT c.*, cat.slug as category_slug, cat.name as category_name 
-                 FROM components c 
-                 LEFT JOIN component_categories cat ON c.category_id = cat.id 
-                 WHERE 1=1";
-        
+        $where = " WHERE 1=1";
         $params = [];
         $types = [];
-        
+
         if ($category && $category !== 'all') {
-            $query .= " AND cat.slug = ?";
+            $where .= " AND cat.slug = ?";
             $params[] = $category;
             $types[] = 's';
         }
         
         if ($search) {
-            $query .= " AND (c.name LIKE ? OR c.description LIKE ?)";
+            $where .= " AND (c.name LIKE ? OR c.description LIKE ?)";
             $params[] = "%$search%";
             $params[] = "%$search%";
             $types[] = 's';
             $types[] = 's';
         }
-        
+
+        if ($isActive !== null && $isActive !== '') {
+            $where .= " AND c.is_active = ?";
+            $params[] = (int)$isActive;
+            $types[] = 'i';
+        }
+
+        $countQuery = "SELECT COUNT(*) as total FROM components c 
+                      LEFT JOIN component_categories cat ON c.category_id = cat.id" . $where;
+        $countStmt = $pdo->prepare($countQuery);
+        foreach($params as $i => $param) {
+            $countStmt->bindValue($i + 1, $param);
+        }
+        $countStmt->execute();
+        $total = (int)($countStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+
+
         $sortBy = $_GET['sort'] ?? 'c.created_at';
         $sortOrder = $_GET['order'] ?? 'desc';
-        $query .= " ORDER BY $sortBy $sortOrder";
         
-        $query .= " LIMIT ? OFFSET ?";
-        $params[] = $limit;
-        $params[] = $offset;
-        $types[] = 'i';
-        $types[] = 'i';
+  
+        $allowedSort = ['id', 'name', 'price', 'c.created_at', 'is_active'];
+        if (!in_array($sortBy, $allowedSort)) $sortBy = 'c.created_at';
+        if (!in_array(strtolower($sortOrder), ['asc', 'desc'])) $sortOrder = 'desc';
+
+        $query = "SELECT c.*, cat.slug as category_slug, cat.name as category_name 
+                  FROM components c 
+                  LEFT JOIN component_categories cat ON c.category_id = cat.id 
+                  $where 
+                  ORDER BY $sortBy $sortOrder 
+                  LIMIT ? OFFSET ?";
         
+
+        $finalParams = $params;
+        $finalParams[] = $limit;
+        $finalParams[] = $offset;
+        
+        $finalTypes = $types;
+        $finalTypes[] = 'i';
+        $finalTypes[] = 'i';
+
         $stmt = $pdo->prepare($query);
-        
-        foreach($params as $i => $param) {
-            $type = $types[$i] ?? 's';
-            switch($type) {
-                case 'i': $stmt->bindValue($i+1, $param, PDO::PARAM_INT); break;
-                default: $stmt->bindValue($i+1, $param, PDO::PARAM_STR);
-            }
+        foreach($finalParams as $i => $param) {
+            $type = $finalTypes[$i] ?? 's';
+            $stmt->bindValue($i + 1, $param, $type === 'i' ? PDO::PARAM_INT : PDO::PARAM_STR);
         }
         
         $stmt->execute();
         $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        $countQuery = "SELECT COUNT(*) as total 
-                      FROM components c 
-                      LEFT JOIN component_categories cat ON c.category_id = cat.id 
-                      WHERE 1=1";
-        
-        $countParams = [];
-        
-        if ($category && $category !== 'all') {
-            $countQuery .= " AND cat.slug = ?";
-            $countParams[] = $category;
-        }
-        
-        if ($search) {
-            $countQuery .= " AND (c.name LIKE ? OR c.description LIKE ?)";
-            $countParams[] = "%$search%";
-            $countParams[] = "%$search%";
-        }
-        
-        $countStmt = $pdo->prepare($countQuery);
-        foreach($countParams as $i => $param) {
-            $countStmt->bindValue($i+1, $param);
-        }
-        
-        $countStmt->execute();
-        $totalResult = $countStmt->fetch(PDO::FETCH_ASSOC);
-        $total = $totalResult['total'] ?? 0;
-        
+
         foreach($components as &$component) {
             $component = processComponentJSON($component);
         }
@@ -602,7 +598,7 @@ function getComponent($pdo) {
     } catch(Exception $e) {
         echo json_encode([
             'success' => false, 
-            'message' => 'Ошибка загрузки компонентов: ' . $e->getMessage(), 
+            'message' => 'Ошибка: ' . $e->getMessage(),
             'components' => []
         ]);
     }
