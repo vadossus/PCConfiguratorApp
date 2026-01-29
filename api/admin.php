@@ -12,16 +12,13 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit;
 }
 
-$host = 'MySQL-8.0'; // localhost - для XAMPP
-$dbname = 'pc_configurator';
-$username = 'root';
-$password = '';
+include_once __DIR__ . '/../config/database.php';
 
-try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch(PDOException $e) {
-    echo json_encode(['success' => false, 'message' => 'ошибка подключения к БД: ' . $e->getMessage()]);
+$database = new Database();
+$db = $database->getConnection();
+
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    echo json_encode(['success' => false, 'message' => 'Доступ запрещен']);
     exit;
 }
 
@@ -29,46 +26,77 @@ $action = $_GET['action'] ?? '';
 $input = json_decode(file_get_contents('php://input'), true);
 switch($action) {
     case 'get_count':
-        getCount($pdo);
+        getCount($db);
         break;
     case 'get_components':
-        getComponents($pdo);
+        getComponents($db);
         break;
     case 'get_users':
-        getUsers($pdo);
+        getUsers($db);
         break;
     case 'get_builds':
-        getBuilds($pdo);
+        getBuilds($db);
         break;
     case 'add_component':
-        addComponent($pdo, $input);
+        addComponent($db, $input);
         break;
     case 'update_user_role':
-        updateUserRole($pdo, $input);
+        updateUserRole($db, $input);
         break;
     case 'delete_component':
-        deleteComponent($pdo, $input);
+        deleteComponent($db, $input);
         break;
     case 'delete_user':
-        deleteUser($pdo, $input);
+        deleteUser($db, $input);
         break;
     case 'toggle_component':
-        toggleComponent($pdo, $input);
+        toggleComponent($db, $input);
         break;
     case 'update_component':
-        updateComponent($pdo, $input);
+        updateComponent($db, $input);
         break;
     case 'get_component':
-        getComponent($pdo);
+        getComponent($db);
         break;
     case 'delete_build':
-        deleteBuild($pdo, $input);
+        deleteBuild($db, $input);
         break;
     case 'log_activity':
-        logActivity($pdo, $input);
+        logActivity($db, $input);
         break;
     case 'get_activities':
-        getActivities($pdo);
+        getActivities($db);
+        break;
+    case 'check_component_activity':
+        $componentId = $_GET['id'] ?? 0;
+        $componentType = $_GET['type'] ?? '';
+        if (!$componentId || !$componentType) {
+            echo json_encode(['success' => false, 'message' => 'Не указаны параметры']);
+            exit;
+        }
+        $tableMap = [
+            'cpus' => 'cpus',
+            'motherboards' => 'motherboards',
+            'rams' => 'rams',
+            'gpus' => 'gpus',
+            'storages' => 'storages',
+            'psus' => 'psus',
+            'cases' => 'cases',
+            'coolers' => 'coolers'
+        ];
+        $table = $tableMap[$componentType] ?? '';
+        if (!$table) {
+            echo json_encode(['success' => false, 'message' => 'Неизвестный тип компонента']);
+            exit;
+        }
+        $stmt = $pdo->prepare("SELECT is_active FROM {$table} WHERE id = ?");
+        $stmt->execute([$componentId]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($result) {
+            echo json_encode(['success' => true, 'is_active' => $result['is_active'] == 1]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Компонент не найден']);
+        }
         break;
     default:
         echo json_encode(['success' => false, 'message' => 'Неизвестное действие: ' . $action]);
@@ -427,18 +455,16 @@ function deleteComponent($pdo, $data) {
     }
     
     try {
-        $stmt = $pdo->query("SHOW COLUMNS FROM components LIKE 'is_active'");
-        if ($stmt->rowCount() > 0) {
-            $stmt = $pdo->prepare("UPDATE components SET is_active = 0 WHERE id = ?");
-        } else {
-            $stmt = $pdo->prepare("DELETE FROM components WHERE id = ?");
-        }
-        
+        $stmt = $pdo->prepare("DELETE FROM components WHERE id = ?");
         $stmt->execute([$data['id']]);
         
-        echo json_encode(['success' => true, 'message' => 'Компонент удален']);
+        if ($stmt->rowCount() > 0) {
+            echo json_encode(['success' => true, 'message' => 'Компонент полностью удален из базы']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Компонент не найден']);
+        }
     } catch(Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Ошибка удаления компонента: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => 'Ошибка: ' . $e->getMessage()]);
     }
 }
 

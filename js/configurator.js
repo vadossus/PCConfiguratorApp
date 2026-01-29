@@ -463,6 +463,24 @@ class Configurator {
             
             const componentTypes = ['cpus', 'motherboards', 'rams', 'gpus', 'storages', 'psus', 'cases', 'coolers'];
             
+            let selectedCount = 0;
+            const totalCount = 8;
+            
+            for (const type of componentTypes) {
+                const component = this.currentBuild[type];
+                if (type === 'storages') {
+                    if (Array.isArray(component) && component.length > 0) {
+                        selectedCount++;
+                    }
+                } else if (component !== null && component !== undefined) {
+                    selectedCount++;
+                }
+            }
+            
+            this.compatibilityStatus.selectedCount = selectedCount;
+            this.compatibilityStatus.totalCount = totalCount;
+            this.compatibilityStatus.progress = (selectedCount / totalCount) * 100;
+            
             this.compatibilityStatus.errors = [];
             this.compatibilityStatus.warnings = [];
             
@@ -570,13 +588,17 @@ class Configurator {
     calculateTotalPrice() {
         let total = 0;
         
-        Object.values(this.currentBuild).forEach(component => {
-            if (Array.isArray(component)) {
-                component.forEach(item => {
-                    total += item.price || 0;
+        Object.keys(this.currentBuild).forEach(type => {
+            const item = this.currentBuild[type];
+            
+            if (!item) return; 
+
+            if (type === 'storages' && Array.isArray(item)) {
+                item.forEach(storage => {
+                    total += parseFloat(storage.price || 0);
                 });
-            } else if (component && component.price) {
-                total += component.price;
+            } else {
+                total += parseFloat(item.price || 0);
             }
         });
         
@@ -1295,8 +1317,7 @@ class Configurator {
         return map[componentType] || 0;
     }
 
-    loadSavedBuild(buildId) {
-
+    async loadSavedBuild(buildId) {
         const build = this.cachedBuilds?.find(b => b.id == buildId);
         
         if (!build) {
@@ -1321,33 +1342,78 @@ class Configurator {
                 }
             }
             
+            let inactiveComponents = [];
+            let hasComponents = false;
             
             if (components && typeof components === 'object') {
                 for (const [type, componentData] of Object.entries(components)) {
                     if (!componentData) continue;
                     
-                    
                     if (type === 'storages' && Array.isArray(componentData)) {
-                        this.currentBuild[type] = componentData.map(item => this.normal_component(item, type));
+                        const activeStorages = [];
+                        for (const item of componentData) {
+                            const normalized = this.normal_component(item, type);
+                            activeStorages.push(normalized);
+                            const isActive = await this.checkComponentActivity(item.id, type);
+                            if (!isActive) {
+                                inactiveComponents.push({
+                                    type: type,
+                                    name: normalized.name,
+                                    id: item.id
+                                });
+                            }
+                        }
+                        if (activeStorages.length > 0) {
+                            this.currentBuild[type] = activeStorages;
+                            hasComponents = true;
+                        }
                     } else if (componentData && componentData.id) {
-                        this.currentBuild[type] = this.normal_component(componentData, type);
+                        const normalized = this.normal_component(componentData, type);
+                        this.currentBuild[type] = normalized;
+                        hasComponents = true;
+                        const isActive = await this.checkComponentActivity(componentData.id, type);
+                        if (!isActive) {
+                            inactiveComponents.push({
+                                type: type,
+                                name: normalized.name,
+                                id: componentData.id
+                            });
+                        }
                     }
                 }
             }
-                
+            
             this.saveBuildToStorage();
-            this.calculatePowerConsumption();
+            this.calculate_power();
             this.renderComponentCards();
             this.updateCompatibilityStatus();
-            const modal = document.getElementById('favorites-modal');
-            if (modal) modal.classList.add('hidden');
             
             this.showMessage(`Сборка "${build.name}" загружена!`, 'success');
             
+            const modal = document.getElementById('favorites-modal');
+            if (modal) modal.classList.add('hidden');
+            
         } catch (error) {
-            this.showMessage(`${error.message}`, 'error');
+            this.showMessage(`Ошибка загрузки: ${error.message}`, 'error');
         } finally {
             this.hideLoader();
+        }
+    }
+
+    async checkComponentActivity(componentId, componentType) {
+        try {
+            const response = await fetch(`api/admin.php?action=check_component_activity&id=${componentId}&type=${componentType}`);
+            if (!response.ok) {
+                return true;
+            }
+            
+            const data = await response.json();
+            if (data.success) {
+                return data.is_active !== false; 
+            }
+            return false;
+        } catch (error) {
+            return false;
         }
     }
 
@@ -1394,6 +1460,7 @@ class Configurator {
             speed: component.speed || '',
             tdp: component.tdp || 0,
             type: component.type || '',
+            is_active: component.is_active !== undefined ? component.is_active : 1, 
             
             critical_specs: this.parseJSONField(component.critical_specs, []),
             compatibility_flags: this.parseJSONField(component.compatibility_flags, []),
@@ -1446,8 +1513,14 @@ class Configurator {
     }
 
     get_Status(componentType, componentData) {
-        if (!this.compatibilityStatus) return 'unknown';
+        if (!componentData) return 'unknown';
         
+        if (componentData.is_active === 0) {
+            return 'inactive'; 
+        }
+
+        if (!this.compatibilityStatus) return 'success';
+            
         if (this.compatibilityStatus.isValid && !this.compatibilityStatus.hasWarnings) {
             return 'success';
         }
@@ -1569,7 +1642,6 @@ class Configurator {
         }
     }
 
-    
 
     updateComponentStatuses() {
         const componentTypes = ['cpus', 'motherboards', 'rams', 'gpus', 'psus', 'cases', 'coolers'];
@@ -1581,7 +1653,7 @@ class Configurator {
                 if (container) {
                     const selectedView = container.querySelector('.selected-component-view');
                     if (selectedView) {
-                        const status = this.get_error_compability(type, component);
+                        const status = this.get_Status(type, component);
                         selectedView.className = `selected-component-view ${status}`;
                         
                         const statusElement = selectedView.querySelector('.selected-component-status');
@@ -1600,7 +1672,7 @@ class Configurator {
                 if (container) {
                     const storageViews = container.querySelectorAll('.selected-component-view');
                     if (storageViews[index]) {
-                        const status = this.getComponentStatusFromCompatibilityErrors('storages', storage);
+                        const status = this.get_Status('storages', storage);
                         storageViews[index].className = `selected-component-view ${status}`;
                         
                         const statusElement = storageViews[index].querySelector('.selected-component-status');
@@ -1619,6 +1691,7 @@ class Configurator {
             case 'success': return '✓';
             case 'warning': return '⚠';
             case 'error': return '✗';
+            case 'inactive': return '⚠'
             default: return '?';
         }
     }
@@ -1628,6 +1701,7 @@ class Configurator {
             case 'success': return 'Компонент совместим с остальной сборкой';
             case 'warning': return 'Есть предупреждение по совместимости. Проверьте спецификации.';
             case 'error': return 'Компонент несовместим с другими компонентами сборки';
+            case 'inactive': return 'Компонент не активен. Возможно, он удалён или временно недоступен.';
             default: return 'Статус совместимости не определен';
         }
     }
