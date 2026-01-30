@@ -68,38 +68,30 @@ switch($action) {
         getActivities($db);
         break;
     case 'check_component_activity':
-        $componentId = $_GET['id'] ?? 0;
-        $componentType = $_GET['type'] ?? '';
-        if (!$componentId || !$componentType) {
-            echo json_encode(['success' => false, 'message' => 'Не указаны параметры']);
+        $componentId = $_GET['id'] ?? 0;      
+        if (!$componentId) {
+            echo json_encode(['success' => false, 'message' => 'Не указан ID']);
             exit;
         }
-        $tableMap = [
-            'cpus' => 'cpus',
-            'motherboards' => 'motherboards',
-            'rams' => 'rams',
-            'gpus' => 'gpus',
-            'storages' => 'storages',
-            'psus' => 'psus',
-            'cases' => 'cases',
-            'coolers' => 'coolers'
-        ];
-        $table = $tableMap[$componentType] ?? '';
-        if (!$table) {
-            echo json_encode(['success' => false, 'message' => 'Неизвестный тип компонента']);
-            exit;
-        }
-        $stmt = $pdo->prepare("SELECT is_active FROM {$table} WHERE id = ?");
-        $stmt->execute([$componentId]);
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($result) {
-            echo json_encode(['success' => true, 'is_active' => $result['is_active'] == 1]);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Компонент не найден']);
+        try {
+            $stmt = $db->prepare("SELECT is_active FROM components WHERE id = ?");
+            $stmt->execute([$componentId]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($result) {
+                echo json_encode([
+                    'success' => true, 
+                    'is_active' => (int)$result['is_active'] === 1
+                ]);
+            } else {
+                echo json_encode(['success' => false, 'is_active' => false, 'message' => 'Компонент не найден']);
+            }
+        } catch (PDOException $e) {
+            echo json_encode(['success' => false, 'message' => 'ошибка БД']);
         }
         break;
     default:
-        echo json_encode(['success' => false, 'message' => 'Неизвестное действие: ' . $action]);
+        echo json_encode(['success' => false, 'message' => 'неизвестное действие: ' . $action]);
 }
 
 function getCount($pdo) {
