@@ -1,5 +1,4 @@
 <?php
-
 session_start();
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
@@ -371,6 +370,7 @@ if ($action === 'get_builds') {
             $query = "SELECT ub.*, u.username 
                       FROM user_builds ub 
                       LEFT JOIN users u ON ub.user_id = u.id 
+                      WHERE ub.user_id = ?
                       ORDER BY ub.created_at DESC";
             $params = [];
         } else {

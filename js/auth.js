@@ -101,12 +101,20 @@ class AuthManager {
                 throw new Error(data.message || 'Ошибка входа');
             }
 
-            this.currentUser = data.user;
+            this.currentUser = {
+                id: data.user.id,           
+                username: data.user.username,
+                email: data.user.email,
+                role: data.user.role,
+                created_at: data.user.created_at 
+            };
+                  
             localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
+            
+            localStorage.setItem('user', JSON.stringify(this.currentUser));
+            
             this.updateUI();
-            
             this.hideAuthModal();
-            
             this.dispatchAuthEvent('login', this.currentUser);
             
             return this.currentUser;
@@ -160,11 +168,33 @@ class AuthManager {
                 method: 'POST'
             });
         } catch (error) {
-            console.error('Error logging out:', error);
         } finally {
             const oldUser = this.currentUser;
             this.currentUser = null;
             localStorage.removeItem('currentUser');
+            localStorage.removeItem('user');
+            localStorage.removeItem('currentBuild');
+
+            
+
+            if (window.configurator) {
+                window.configurator.currentBuild = {
+                    cpus: null,
+                    motherboards: null,
+                    rams: null,
+                    gpus: null,
+                    storages: [],
+                    psus: null,
+                    cases: null,
+                    coolers: null
+                };
+                
+        
+                window.configurator.renderComponentCards();
+                window.configurator.calculate_power();
+                window.configurator.updateCompatibilityStatus();
+            }
+            
             this.updateUI();
             
             this.dispatchAuthEvent('logout', oldUser);

@@ -6,21 +6,10 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, GET, PUT, DELETE");
 header("Access-Control-Allow-Headers: Content-Type");
 
-
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    echo json_encode(['success' => false, 'message' => 'Доступ запрещен']);
-    exit;
-}
-
 include_once __DIR__ . '/../config/database.php';
 
 $database = new Database();
 $db = $database->getConnection();
-
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    echo json_encode(['success' => false, 'message' => 'Доступ запрещен']);
-    exit;
-}
 
 $action = $_GET['action'] ?? '';
 $input = json_decode(file_get_contents('php://input'), true);
@@ -89,6 +78,9 @@ switch($action) {
         } catch (PDOException $e) {
             echo json_encode(['success' => false, 'message' => 'ошибка БД']);
         }
+        break;
+    case 'get_my_builds':
+        getUserBuildsOnly($db);
         break;
     default:
         echo json_encode(['success' => false, 'message' => 'неизвестное действие: ' . $action]);
@@ -223,14 +215,26 @@ function getBuilds($pdo) {
             return;
         }
         
-        $stmt = $pdo->query("
-            SELECT ub.*, u.username
-            FROM user_builds ub
-            LEFT JOIN users u ON ub.user_id = u.id
-            ORDER BY ub.created_at DESC
-            LIMIT 20
-        ");
-        
+        $currentUserId = (int)$_SESSION['user_id'];
+        $currentUserRole = $_SESSION['role'] ?? 'user';
+
+        if ($currentUserRole === 'admin') {
+            $query = "SELECT ub.*, u.username 
+                     FROM user_builds ub 
+                     LEFT JOIN users u ON ub.user_id = u.id 
+                     ORDER BY ub.created_at DESC";
+            $params = [];
+        } else {
+            $query = "SELECT ub.*, u.username 
+                     FROM user_builds ub 
+                     LEFT JOIN users u ON ub.user_id = u.id 
+                     WHERE ub.user_id = ? 
+                     ORDER BY ub.created_at DESC";
+            $params = [$currentUserId];
+        }
+
+        $stmt = $pdo->prepare($query);
+        $stmt->execute($params);
         $builds = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         foreach($builds as &$build) {
@@ -267,6 +271,7 @@ function getBuilds($pdo) {
                 $build['components'] = [];
             }
         }
+        
         echo json_encode(['success' => true, 'builds' => $builds]);
     } catch(Exception $e) {
         echo json_encode(['success' => false, 'message' => 'Ошибка загрузки сборок: ' . $e->getMessage(), 'builds' => []]);
@@ -659,6 +664,7 @@ function updateComponent($pdo, $data) {
         echo json_encode(['success' => false, 'message' => 'Ошибка обновления компонента: ' . $e->getMessage()]);
     }
 }
+
 
 function processComponentJSON($component) {
     if (isset($component['critical_specs'])) {

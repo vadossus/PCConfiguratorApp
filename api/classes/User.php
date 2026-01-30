@@ -17,21 +17,18 @@ class User {
 
     public function register() {
         $query = "INSERT INTO " . $this->table . " 
-                  SET username = :username, 
-                      email = :email, 
-                      password = :password,
-                      role = :role";
+                SET username = :username, 
+                    email = :email, 
+                    password = :password,
+                    role = :role";
 
         $stmt = $this->conn->prepare($query);
-
 
         $this->username = htmlspecialchars(strip_tags($this->username));
         $this->email = htmlspecialchars(strip_tags($this->email));
         $this->role = htmlspecialchars(strip_tags($this->role));
         
-
         $this->password = password_hash($this->password, PASSWORD_BCRYPT);
-
 
         $stmt->bindParam(":username", $this->username);
         $stmt->bindParam(":email", $this->email);
@@ -39,6 +36,7 @@ class User {
         $stmt->bindParam(":role", $this->role);
 
         if($stmt->execute()) {
+            $this->id = $this->conn->lastInsertId();
             return true;
         }
         return false;
