@@ -27,7 +27,18 @@ class Configurator {
 
     init() {     
         this.loadBuildFromStorage();
-        
+
+        window.addEventListener('auth:logout', () => {
+            this.authManager.currentUser = null;
+            
+            this.currentBuild = this.getEmptyBuild();
+            
+            this.renderComponentCards();
+            this.calculate_power();
+            this.updateCompatibilityStatus();
+            this.clearBuildFromStorage();
+        });
+            
         const domLoadedHandler = () => {
             this.renderComponentCards();
             this.calculate_power();
@@ -1093,17 +1104,35 @@ class Configurator {
             loader.classList.add('hidden');
 
             if (data.success && data.builds && data.builds.length > 0) {
-                this.renderFavorites(data.builds);
+                const currentUserId = this.authManager.currentUser?.id;
+                const userBuilds = data.builds.filter(build => build.user_id == currentUserId);
+                
+                
+                if (userBuilds.length > 0) {
+                    this.renderFavorites(userBuilds);
+                } else {
+                    grid.innerHTML = `
+                        <div class="no-data" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 20px; width: 100%;">
+                            <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 20px;">
+                            <h3 style="margin-bottom: 10px; color: #333; font-size: 18px;">Мои сборки</h3>
+                            <p style="margin-bottom: 20px; font-size: 16px; color: #666;">Нет сохраненных сборок.</p>
+                            <button class="btn btn-primary" onclick="document.getElementById('favorites-modal').classList.add('hidden')" style="margin-top: 10px; width: auto; padding: 10px 30px;">
+                                Создать первую сборку
+                            </button>
+                        </div>
+                    `;
+                }
             } else {
                 grid.innerHTML = `
-                    <div class="no-data">
-                        <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 10px;">
-                        <p>Нет сохраненных сборок.</p>
-                        <button class="btn btn-primary" onclick="document.getElementById('favorites-modal').classList.add('hidden')">
-                            Создать первую сборку
-                        </button>
-                    </div>
-                `;
+                        <div class="no-data" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 20px; width: 100%;">
+                            <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 20px;">
+                            <h3 style="margin-bottom: 10px; color: #333; font-size: 18px;">Мои сборки</h3>
+                            <p style="margin-bottom: 20px; font-size: 16px; color: #666;">Нет сохраненных сборок.</p>
+                            <button class="btn btn-primary" onclick="document.getElementById('favorites-modal').classList.add('hidden')" style="margin-top: 10px; width: auto; padding: 10px 30px;">
+                                Создать первую сборку
+                            </button>
+                        </div>
+                    `;
             }
         } catch (error) {
             loader.classList.add('hidden');
@@ -1113,17 +1142,26 @@ class Configurator {
 
     async renderFavorites(builds) {
         const grid = document.getElementById('favorites-grid');
+
+        const currentUser = this.authManager.currentUser;
+        const filteredBuilds = builds.filter(build => {
+            if (currentUser && currentUser.role === 'admin') {
+                return true;
+            }
+            return build.user_id === (currentUser ? currentUser.id : 0);
+        });
         
         if (!builds || builds.length === 0) {
             grid.innerHTML = `
-                <div class="no-data">
-                    <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 10px;">
-                    <p>Нет сохраненных сборок.</p>
-                    <button class="btn btn-primary" onclick="document.getElementById('favorites-modal').classList.add('hidden')">
-                        Создать первую сборку
-                    </button>
-                </div>
-            `;
+                        <div class="no-data" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 20px; width: 100%;">
+                            <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 20px;">
+                            <h3 style="margin-bottom: 10px; color: #333; font-size: 18px;">Мои сборки</h3>
+                            <p style="margin-bottom: 20px; font-size: 16px; color: #666;">Нет сохраненных сборок.</p>
+                            <button class="btn btn-primary" onclick="document.getElementById('favorites-modal').classList.add('hidden')" style="margin-top: 10px; width: auto; padding: 10px 30px;">
+                                Создать первую сборку
+                            </button>
+                        </div>
+                    `;
             return;
         }
         
@@ -1543,7 +1581,7 @@ class Configurator {
         
 
         if (componentData.is_active !== undefined && Number(componentData.is_active) === 0) {
-            return 'inactive'; 
+            return 'inactive';
         }
         
         if (!this.compatibilityStatus) return 'success';
@@ -1554,10 +1592,16 @@ class Configurator {
         
         const componentName = componentData?.name || '';
         
-
         for (const error of this.compatibilityStatus.errors || []) {
             const errorContainsName = componentName && error.message.includes(componentName);
-            const errorContainsType = error.message.includes(this.getComponentTypeName(componentType));
+            
+            let errorContainsType = false;
+            if (componentType === 'motherboards') {
+                errorContainsType = error.message.includes('плат') || 
+                                error.message.includes('материнск'); 
+            } else {
+                errorContainsType = error.message.includes(this.getComponentTypeName(componentType));
+            }
             
 
             const isSocketError = (componentType === 'cpus' || componentType === 'motherboards' || componentType === 'coolers') && 
@@ -1573,32 +1617,59 @@ class Configurator {
                                                     error.message.includes('проверьте совместимость'));
                 
                 if (isCoolerCompatibilityWarning) {
-                    return 'warning'; 
+                    return 'warning';
                 }
                 return 'error';
             }
         }
         
+
         for (const warning of this.compatibilityStatus.warnings || []) {
-            if (warning.message.includes(componentName) || 
-                warning.message.includes(this.getComponentTypeName(componentType))) {
+            const warningText = warning.message.toLowerCase();
+            const compName = componentName.toLowerCase();
+            
+            let warningContainsType = false;
+            if (componentType === 'motherboards') {
+                warningContainsType = warningText.includes('плат') || 
+                                    warningText.includes('материнск');
+            } else if (componentType === 'rams') {
+                warningContainsType = warningText.includes('память') || 
+                                    warningText.includes('озу') ||
+                                    warningText.includes('ddr');
+            } else if (componentType === 'cpus') {
+                warningContainsType = warningText.includes('процессор') || 
+                                    warningText.includes('cpu');
+            } else {
+                warningContainsType = warningText.includes(this.getComponentTypeName(componentType).toLowerCase());
+            }
+            
+            if (warningText.includes(compName) || warningContainsType) {
                 return 'warning';
             }
         }
         
-        if (this.compatibilityStatus.hasWarnings) {
-            return 'warning';
-        }
-        
+
         if (!this.compatibilityStatus.isValid && this.compatibilityStatus.errors?.length > 0) {
-            const hasErrorsForThisComponent = this.compatibilityStatus.errors.some(error => 
-                error.component1 === componentType || error.component2 === componentType ||
-                error.message.includes(componentName) ||
-                error.message.includes(this.getComponentTypeName(componentType))
-            );
+            const hasErrorsForThisComponent = this.compatibilityStatus.errors.some(error => {
+                const errorText = error.message.toLowerCase();
+                const compName = componentName.toLowerCase();
+                
+                let errorContainsType = false;
+                if (componentType === 'motherboards') {
+                    errorContainsType = errorText.includes('плат') || 
+                                    errorText.includes('материнск');
+                } else {
+                    errorContainsType = errorText.includes(this.getComponentTypeName(componentType).toLowerCase());
+                }
+                
+                return error.component1 === componentType || 
+                    error.component2 === componentType ||
+                    errorText.includes(compName) ||
+                    errorContainsType;
+            });
             
             if (!hasErrorsForThisComponent) {
-                return 'success'; 
+                return 'success';
             }
         }
         
@@ -1862,7 +1933,6 @@ class Configurator {
                 this.currentBuild = parsed;
                 
             } catch (error) {
-                console.error("Ошибка загрузки сборки:", error);
                 this.currentBuild = this.getEmptyBuild();
             }
         }
@@ -2025,21 +2095,27 @@ class Configurator {
                 "Моя сборка " + new Date().toLocaleDateString('ru-RU')
             ) || "Моя сборка " + new Date().toLocaleDateString('ru-RU');
 
+        
             const buildData = {
                 name: buildName,
                 total_price: this.calculateTotalPrice(),
                 components: components,  
-                user_id: this.authManager.currentUser.id
+                user_id: this.authManager.currentUser.id,
+                username: this.authManager.currentUser.username,
+                user_role: this.authManager.currentUser.role
             };
 
-
-            const response = await fetch('api/builds.php?action=save', {
+            const response = await fetch(`api/builds.php?action=save&user_id=${this.authManager.currentUser.id}`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify(buildData)
+                body: JSON.stringify({
+                    name: buildName,
+                    total_price: this.calculateTotalPrice(),
+                    components: components
+                })
             });
 
             const data = await response.json();

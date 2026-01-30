@@ -1,4 +1,5 @@
 <?php
+session_start();
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 header("Access-Control-Allow-Methods: POST");
@@ -31,16 +32,28 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                     echo json_encode(array("message" => "пользователь уже существует ."));
                 } else {
                     if($user->register()) {
-                        http_response_code(201);
-                        echo json_encode(array(
-                            "message" => "Пользователь успешно зарегистрирован.",
-                            "user" => array(
-                                "id" => $user->id,
-                                "username" => $user->username,
-                                "email" => $user->email,
-                                "role" => $user->role
-                            )
-                        ));
+                        $query = "SELECT id, username, email, role FROM users WHERE username = ?";
+                        $stmt = $db->prepare($query);
+                        $stmt->bindParam(1, $data->username);
+                        $stmt->execute();
+                        $user_data = $stmt->fetch(PDO::FETCH_ASSOC);
+                        
+                        if($user_data) {
+                            $_SESSION['user_id'] = $user_data['id'];
+                            $_SESSION['username'] = $user_data['username'];
+                            $_SESSION['role'] = $user_data['role'];
+                            session_write_close();
+                            session_start(); 
+                            http_response_code(201);
+                            echo json_encode(array(
+                                "message" => "Пользователь успешно зарегистрирован.",
+                                "user" => $user_data,
+                                "token" => session_id()
+                            ));
+                        } else {
+                            http_response_code(503);
+                            echo json_encode(array("message" => "ошибка получения данных пользователя"));
+                        }
                     } else {
                         http_response_code(503);
                         echo json_encode(array("message" => "ошибка регистрации"));
@@ -50,7 +63,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                 http_response_code(400);
                 echo json_encode(array("message" => "заполните поля."));
             }
-        } 
+        }
         elseif($action == 'login') {
             if(!empty($data->username) && !empty($data->password)) {
                 $user->username = $data->username;
