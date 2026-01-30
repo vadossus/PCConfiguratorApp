@@ -1,6 +1,6 @@
 <?php
 class Database {
-    private $host = "localhost"; // MySQL-8.0 если это OSPanel
+    private $host = "localhost"; // OSPanel - MySQL-8.0
     private $db_name = "pc_configurator";
     private $username = "root";
     private $password = "";
@@ -11,8 +11,10 @@ class Database {
 
         try {
             $this->conn = new PDO(
+                "mysql:host=" . $this->host . ";dbname=" . $this->db_name,
                 //;port=3306 - при запуске OSPanel, если XAMPP можно удалить порт
                 "mysql:host=" . $this->host . ";port=3306;dbname=" . $this->db_name, 
+
                 $this->username,
                 $this->password
             );
