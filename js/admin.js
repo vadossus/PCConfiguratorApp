@@ -38,10 +38,7 @@ class AdminPanel {
             category: 'all',
             search: '',
             sortBy: 'id',
-<<<<<<< HEAD
-=======
             status: 'all',
->>>>>>> 0a8b963 (Обновление полного проекта)
             sortOrder: 'desc',
             page: 1,
             limit: 10
@@ -102,10 +99,7 @@ class AdminPanel {
         const typeFilter = document.getElementById('component-type-filter');
         const searchInput = document.getElementById('component-search');
         const sortSelect = document.getElementById('component-sort');
-<<<<<<< HEAD
-=======
         const statusFilter = document.getElementById('component-status');
->>>>>>> 0a8b963 (Обновление полного проекта)
         
         if (typeFilter) {
             typeFilter.addEventListener('change', (e) => {
@@ -132,8 +126,6 @@ class AdminPanel {
                 this.applyFilters();
             });
         }
-<<<<<<< HEAD
-=======
 
         if (statusFilter) {
             statusFilter.addEventListener('change', (e) => {
@@ -142,7 +134,6 @@ class AdminPanel {
                 this.loadComponents();
             });
         }
->>>>>>> 0a8b963 (Обновление полного проекта)
     }
 
     async applyFilters() {
@@ -461,13 +452,10 @@ class AdminPanel {
                 params.append('sort', this.filters.sortBy);
                 params.append('order', this.filters.sortOrder);
             }
-<<<<<<< HEAD
-=======
 
             if (this.filters.status && this.filters.status !== 'all') {
                 params.append('is_active', this.filters.status === 'active' ? '1' : '0');
             }
->>>>>>> 0a8b963 (Обновление полного проекта)
             
             const response = await fetch(`${this.API_BASE_URL}get_component&${params.toString()}`);
             if (!response.ok) throw new Error('Ошибка загрузки');
@@ -753,13 +741,8 @@ class AdminPanel {
                         <div>
                             <strong>${this.escapeHtml(component.name)}</strong>
                             <div class="text-muted small">
-<<<<<<< HEAD
-                                ${this.escapeHtml(component.description || '').substring(0, 100)}
-                                ${component.description && component.description.length > 100 ? '...' : ''}
-=======
                                 ${this.escapeHtml(component.description || '').substring(0, 50)}
                                 ${component.description && component.description.length > 50 ? '...' : ''}
->>>>>>> 0a8b963 (Обновление полного проекта)
                             </div>
                         </div>
                     </div>
@@ -774,11 +757,7 @@ class AdminPanel {
                 <td class="text-right">${this.formatPrice(component.price)} ₽</td>
                 <td>
                     <span class="status-badge ${component.is_active ? 'active' : 'inactive'}">
-<<<<<<< HEAD
-                        ${component.is_active ? '✓ Активен' : '✗ Не активен'}
-=======
                         ${component.is_active ? 'Активен' : 'Не активен'}
->>>>>>> 0a8b963 (Обновление полного проекта)
                     </span>
                 </td>
                 <td>
@@ -786,19 +765,12 @@ class AdminPanel {
                         <button class="btn btn-sm btn-outline-primary" 
                                 onclick="adminPanel.editComponent(${component.id})" 
                                 title="Редактировать">
-<<<<<<< HEAD
-=======
                             Редактировать
->>>>>>> 0a8b963 (Обновление полного проекта)
                         </button>
                         <button class="btn btn-sm btn-outline-danger" 
                                 onclick="adminPanel.deleteComponent(${component.id})" 
                                 title="Удалить">
-<<<<<<< HEAD
-                            🗑️
-=======
                             Удалить
->>>>>>> 0a8b963 (Обновление полного проекта)
                         </button>
                         <button class="btn btn-sm btn-outline-secondary" 
                                 onclick="adminPanel.toggleComponent(${component.id}, ${component.is_active})" 

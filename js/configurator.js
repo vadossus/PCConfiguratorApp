@@ -219,7 +219,7 @@ class Configurator {
                 const isActive = powerWidget.classList.toggle('active');
                 
                 if (isActive) {
-                    powerDetails.style.maxHeight = '400px';
+                    powerDetails.style.maxHeight = '450px';
                     powerDetails.style.opacity = '1';
                 } else {
                     powerDetails.style.maxHeight = '0';
@@ -463,8 +463,6 @@ class Configurator {
             
             const componentTypes = ['cpus', 'motherboards', 'rams', 'gpus', 'storages', 'psus', 'cases', 'coolers'];
             
-<<<<<<< HEAD
-=======
             let selectedCount = 0;
             const totalCount = 8;
             
@@ -483,7 +481,6 @@ class Configurator {
             this.compatibilityStatus.totalCount = totalCount;
             this.compatibilityStatus.progress = (selectedCount / totalCount) * 100;
             
->>>>>>> 0a8b963 (Обновление полного проекта)
             this.compatibilityStatus.errors = [];
             this.compatibilityStatus.warnings = [];
             
@@ -591,15 +588,6 @@ class Configurator {
     calculateTotalPrice() {
         let total = 0;
         
-<<<<<<< HEAD
-        Object.values(this.currentBuild).forEach(component => {
-            if (Array.isArray(component)) {
-                component.forEach(item => {
-                    total += item.price || 0;
-                });
-            } else if (component && component.price) {
-                total += component.price;
-=======
         Object.keys(this.currentBuild).forEach(type => {
             const item = this.currentBuild[type];
             
@@ -611,7 +599,6 @@ class Configurator {
                 });
             } else {
                 total += parseFloat(item.price || 0);
->>>>>>> 0a8b963 (Обновление полного проекта)
             }
         });
         
@@ -815,6 +802,9 @@ class Configurator {
                 detailsHTML += `<div class="power-divider"></div>`;
                 detailsHTML += `<div class="power-item total"><span>Итого потребление</span> <span>${totalPower} W</span></div>`;
                 const recommendedPower = Math.ceil(totalPower * 1.2);
+                const psu12vPower = build.psus ? Math.round((parseInt(build.psus.wattage) || 0) * 0.85) : 0;
+                const powerDelta = psu12vPower - totalPower;
+                detailsHTML += `<div class="power-item delta"><span>Запас мощности</span> <span>${powerDelta} W</span></div>`;
                 detailsHTML += `<div class="power-item recommendation"><span>Рекомендуемый БП</span> <span>от ${recommendedPower} W</span></div>`;
                 if (build.psus) {
                     const psuWattage = parseInt(build.psus.wattage) || 0;
@@ -1330,12 +1320,7 @@ class Configurator {
         return map[componentType] || 0;
     }
 
-<<<<<<< HEAD
-    loadSavedBuild(buildId) {
-
-=======
     async loadSavedBuild(buildId) {
->>>>>>> 0a8b963 (Обновление полного проекта)
         const build = this.cachedBuilds?.find(b => b.id == buildId);
         
         if (!build) {
@@ -1360,38 +1345,13 @@ class Configurator {
                 }
             }
             
-<<<<<<< HEAD
-=======
             let inactiveComponents = [];
             let hasComponents = false;
->>>>>>> 0a8b963 (Обновление полного проекта)
             
             if (components && typeof components === 'object') {
                 for (const [type, componentData] of Object.entries(components)) {
                     if (!componentData) continue;
                     
-<<<<<<< HEAD
-                    
-                    if (type === 'storages' && Array.isArray(componentData)) {
-                        this.currentBuild[type] = componentData.map(item => this.normal_component(item, type));
-                    } else if (componentData && componentData.id) {
-                        this.currentBuild[type] = this.normal_component(componentData, type);
-                    }
-                }
-            }
-                
-            this.saveBuildToStorage();
-            this.calculatePowerConsumption();
-            this.renderComponentCards();
-            this.updateCompatibilityStatus();
-            const modal = document.getElementById('favorites-modal');
-            if (modal) modal.classList.add('hidden');
-            
-            this.showMessage(`Сборка "${build.name}" загружена!`, 'success');
-            
-        } catch (error) {
-            this.showMessage(`${error.message}`, 'error');
-=======
                     if (type === 'storages' && Array.isArray(componentData)) {
                         const activeStorages = [];
                         for (const item of componentData) {
@@ -1438,14 +1398,11 @@ class Configurator {
             
         } catch (error) {
             this.showMessage(`Ошибка загрузки: ${error.message}`, 'error');
->>>>>>> 0a8b963 (Обновление полного проекта)
         } finally {
             this.hideLoader();
         }
     }
 
-<<<<<<< HEAD
-=======
     async checkComponentActivity(componentId, componentType) {
         try {
             const response = await fetch(`api/admin.php?action=check_component_activity&id=${componentId}&type=${componentType}`);
@@ -1463,7 +1420,6 @@ class Configurator {
         }
     }
 
->>>>>>> 0a8b963 (Обновление полного проекта)
     async getComponentFromDatabase(componentId, componentType) {
         try {
             const tableMap = {
@@ -1507,10 +1463,7 @@ class Configurator {
             speed: component.speed || '',
             tdp: component.tdp || 0,
             type: component.type || '',
-<<<<<<< HEAD
-=======
             is_active: component.is_active !== undefined ? component.is_active : 1, 
->>>>>>> 0a8b963 (Обновление полного проекта)
             
             critical_specs: this.parseJSONField(component.critical_specs, []),
             compatibility_flags: this.parseJSONField(component.compatibility_flags, []),
@@ -1563,29 +1516,50 @@ class Configurator {
     }
 
     get_Status(componentType, componentData) {
-<<<<<<< HEAD
-        if (!this.compatibilityStatus) return 'unknown';
-        
-=======
         if (!componentData) return 'unknown';
+
+        if (componentData._pendingActivityCheck) {
+            delete componentData._pendingActivityCheck;
+            
+            const checkActivity = async () => {
+                try {
+                    const isActive = await this.checkComponentActivity(componentData.id, componentType);
+                    if (!isActive) {
+                        componentData.is_active = 0;
+                        setTimeout(() => {
+                            this.updateComponentStatuses();
+                        }, 100);
+                    } else {
+                        componentData.is_active = 1;
+                    }
+                } catch (e) {
+                    componentData.is_active = 1;
+                }
+            };
+            checkActivity();
+            
+            return 'success';
+        }
         
-        if (componentData.is_active === 0) {
+
+        if (componentData.is_active !== undefined && Number(componentData.is_active) === 0) {
             return 'inactive'; 
         }
-
+        
         if (!this.compatibilityStatus) return 'success';
             
->>>>>>> 0a8b963 (Обновление полного проекта)
         if (this.compatibilityStatus.isValid && !this.compatibilityStatus.hasWarnings) {
             return 'success';
         }
         
         const componentName = componentData?.name || '';
         
+
         for (const error of this.compatibilityStatus.errors || []) {
             const errorContainsName = componentName && error.message.includes(componentName);
             const errorContainsType = error.message.includes(this.getComponentTypeName(componentType));
             
+
             const isSocketError = (componentType === 'cpus' || componentType === 'motherboards' || componentType === 'coolers') && 
                                 error.message.includes('сокет');
             
@@ -1595,8 +1569,8 @@ class Configurator {
             
             if (errorContainsName || errorContainsType || isSocketError || isRamError) {
                 const isCoolerCompatibilityWarning = componentType === 'coolers' && 
-                                                    error.message.includes('возможно не совместим') ||
-                                                    error.message.includes('проверьте совместимость');
+                                                    (error.message.includes('возможно не совместим') ||
+                                                    error.message.includes('проверьте совместимость'));
                 
                 if (isCoolerCompatibilityWarning) {
                     return 'warning'; 
@@ -1697,10 +1671,6 @@ class Configurator {
         }
     }
 
-<<<<<<< HEAD
-    
-=======
->>>>>>> 0a8b963 (Обновление полного проекта)
 
     updateComponentStatuses() {
         const componentTypes = ['cpus', 'motherboards', 'rams', 'gpus', 'psus', 'cases', 'coolers'];
@@ -1712,11 +1682,7 @@ class Configurator {
                 if (container) {
                     const selectedView = container.querySelector('.selected-component-view');
                     if (selectedView) {
-<<<<<<< HEAD
-                        const status = this.get_error_compability(type, component);
-=======
                         const status = this.get_Status(type, component);
->>>>>>> 0a8b963 (Обновление полного проекта)
                         selectedView.className = `selected-component-view ${status}`;
                         
                         const statusElement = selectedView.querySelector('.selected-component-status');
@@ -1735,11 +1701,7 @@ class Configurator {
                 if (container) {
                     const storageViews = container.querySelectorAll('.selected-component-view');
                     if (storageViews[index]) {
-<<<<<<< HEAD
-                        const status = this.getComponentStatusFromCompatibilityErrors('storages', storage);
-=======
                         const status = this.get_Status('storages', storage);
->>>>>>> 0a8b963 (Обновление полного проекта)
                         storageViews[index].className = `selected-component-view ${status}`;
                         
                         const statusElement = storageViews[index].querySelector('.selected-component-status');
@@ -1758,10 +1720,7 @@ class Configurator {
             case 'success': return '✓';
             case 'warning': return '⚠';
             case 'error': return '✗';
-<<<<<<< HEAD
-=======
             case 'inactive': return '⚠'
->>>>>>> 0a8b963 (Обновление полного проекта)
             default: return '?';
         }
     }
@@ -1771,10 +1730,7 @@ class Configurator {
             case 'success': return 'Компонент совместим с остальной сборкой';
             case 'warning': return 'Есть предупреждение по совместимости. Проверьте спецификации.';
             case 'error': return 'Компонент несовместим с другими компонентами сборки';
-<<<<<<< HEAD
-=======
             case 'inactive': return 'Компонент не активен. Возможно, он удалён или временно недоступен.';
->>>>>>> 0a8b963 (Обновление полного проекта)
             default: return 'Статус совместимости не определен';
         }
     }
@@ -1888,9 +1844,17 @@ class Configurator {
                 Object.keys(parsed).forEach(key => {
                     if (parsed[key]) {
                         if (key === 'storages' && Array.isArray(parsed[key])) {
-                            parsed[key] = parsed[key].map(item => this.extractComponentData(item));
+                            parsed[key] = parsed[key].map(item => {
+                                const componentData = this.extractComponentData(item);
+                                componentData._pendingActivityCheck = true;
+                                componentData.is_active = 1; 
+                                return componentData;
+                            });
                         } else if (key !== 'storages') {
-                            parsed[key] = this.extractComponentData(parsed[key]);
+                            const componentData = this.extractComponentData(parsed[key]);
+                            componentData._pendingActivityCheck = true;
+                            componentData.is_active = 1; 
+                            parsed[key] = componentData;
                         }
                     }
                 });
@@ -1898,6 +1862,7 @@ class Configurator {
                 this.currentBuild = parsed;
                 
             } catch (error) {
+                console.error("Ошибка загрузки сборки:", error);
                 this.currentBuild = this.getEmptyBuild();
             }
         }
@@ -2228,24 +2193,15 @@ class Configurator {
                     const factorUpper = factor.toUpperCase();
                     if (factorUpper === mbFormFactor) return true;
                     
-<<<<<<< HEAD
-                    const compatibilityHierarchy = {
-=======
                     const compatibility_erarxiya = {
->>>>>>> 0a8b963 (Обновление полного проекта)
                         'E-ATX': ['E-ATX', 'ATX', 'MICRO-ATX', 'MINI-ITX'],
                         'ATX': ['ATX', 'MICRO-ATX', 'MINI-ITX'],
                         'MICRO-ATX': ['MICRO-ATX', 'MINI-ITX'],
                         'MINI-ITX': ['MINI-ITX']
                     };
                     
-<<<<<<< HEAD
-                    if (compatibilityHierarchy[factorUpper]) {
-                        return compatibilityHierarchy[factorUpper].includes(mbFormFactor);
-=======
                     if (compatibility_erarxiya[factorUpper]) {
                         return compatibility_erarxiya[factorUpper].includes(mbFormFactor);
->>>>>>> 0a8b963 (Обновление полного проекта)
                     }
                     
                     return false;

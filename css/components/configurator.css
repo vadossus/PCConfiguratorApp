@@ -895,8 +895,6 @@
     color: #9ca3af !important;
     cursor: not-allowed;
     border-color: #4b5563 !important;
-<<<<<<< HEAD
-=======
 }
 
 .selected-component-view.inactive {
@@ -931,5 +929,4 @@
 
 .selected-component-view.inactive .btn-remove-selected:hover {
     background: #545b62;
->>>>>>> 0a8b963 (Обновление полного проекта)
 }

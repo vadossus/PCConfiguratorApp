@@ -34,11 +34,7 @@ class DataManager {
             const params = new URLSearchParams();
             params.append('category', apiCategory);
             params.append('page', page);
-<<<<<<< HEAD
-            params.append('limit', 10);
-=======
             params.append('limit', 5);
->>>>>>> 0a8b963 (Обновление полного проекта)
             
             if (this.shouldApplyFilter(componentType, 'search', filters.search)) {
                 params.append('search', filters.search);
@@ -114,11 +110,7 @@ class DataManager {
                 totalItems: totalItems,
                 hasNext: page < totalPages,
                 hasPrev: page > 1,
-<<<<<<< HEAD
-                itemsPerPage: 10
-=======
                 itemsPerPage: 5
->>>>>>> 0a8b963 (Обновление полного проекта)
             };
             
         } catch (error) {
@@ -145,11 +137,7 @@ class DataManager {
     }
 
     getFallbackComponents(componentType, page, filters) {
-<<<<<<< HEAD
-        const testData = this.getTestComponents(componentType);
-=======
         const testData = [];
->>>>>>> 0a8b963 (Обновление полного проекта)
         
         let filteredComponents = testData;
         
@@ -186,127 +174,6 @@ class DataManager {
         };
     }
 
-<<<<<<< HEAD
-    getTestComponents(componentType) {
-        const testData = {
-            cpus: [
-                {
-                    id: 1, name: "AMD Ryzen 5 5600X", category: "cpu", price: 25000,
-                    image: "ryzen5_5600x.jpg", socket: "AM4", wattage: 65,
-                    critical_specs: ["6 ядер", "12 потоков", "3.7 ГГц"]
-                },
-                {
-                    id: 2, name: "Intel Core i5-12400F", category: "cpu", price: 18000,
-                    image: "i5_12400f.jpg", socket: "LGA1700", wattage: 65,
-                    critical_specs: ["6 ядер", "12 потоков", "2.5 ГГц"]
-                },
-                {
-                    id: 3, name: "AMD Ryzen 7 5800X", category: "cpu", price: 32000,
-                    image: "ryzen7_5800x.jpg", socket: "AM4", wattage: 105,
-                    critical_specs: ["8 ядер", "16 потоков", "3.8 ГГц"]
-                }
-            ],
-            motherboards: [
-                {
-                    id: 1, name: "ASUS ROG Strix B550-F", category: "motherboard", price: 15000,
-                    image: "asus_b550f.jpg", socket: "AM4", memory_type: "DDR4",
-                    critical_specs: ["Socket AM4", "DDR4", "2 слота M.2"]
-                },
-                {
-                    id: 2, name: "Gigabyte B660M", category: "motherboard", price: 12000,
-                    image: "gigabyte_b660m.jpg", socket: "LGA1700", memory_type: "DDR5",
-                    critical_specs: ["Socket LGA1700", "DDR5", "Micro-ATX"]
-                },
-                {
-                    id: 3, name: "MSI MAG B550 TOMAHAWK", category: "motherboard", price: 17000,
-                    image: "msi_b550_tomahawk.jpg", socket: "AM4", memory_type: "DDR4",
-                    critical_specs: ["Socket AM4", "DDR4", "ATX", "2.5G LAN"]
-                }
-            ],
-            rams: [
-                {
-                    id: 1, name: "Kingston Fury Beast 16GB", category: "ram", price: 6000,
-                    image: "kingston_fury_beast.jpg", type: "DDR4", speed: 3200,
-                    critical_specs: ["16 ГБ", "DDR4", "3200 МГц"]
-                },
-                {
-                    id: 2, name: "Corsair Vengeance 32GB", category: "ram", price: 8500,
-                    image: "corsair_vengeance.jpg", type: "DDR4", speed: 3600,
-                    critical_specs: ["32 ГБ", "DDR4", "3600 МГц"]
-                },
-                {
-                    id: 3, name: "G.Skill Trident Z 16GB", category: "ram", price: 7500,
-                    image: "gskill_trident.jpg", type: "DDR5", speed: 6000,
-                    critical_specs: ["16 ГБ", "DDR5", "6000 МГц"]
-                }
-            ],
-            gpus: [
-                {
-                    id: 1, name: "NVIDIA RTX 3060", category: "gpu", price: 35000,
-                    image: "rtx3060.jpg", wattage: 170,
-                    critical_specs: ["12 ГБ GDDR6", "PCIe 4.0"]
-                },
-                {
-                    id: 2, name: "AMD Radeon RX 6700 XT", category: "gpu", price: 38000,
-                    image: "rx6700xt.jpg", wattage: 230,
-                    critical_specs: ["12 ГБ GDDR6", "PCIe 4.0"]
-                }
-            ],
-            storages: [
-                {
-                    id: 1, name: "Samsung 980 1TB", category: "storage", price: 8000,
-                    image: "samsung_980.jpg", type: "M.2", capacity: 1000,
-                    critical_specs: ["1 ТБ", "M.2 NVMe", "3500 МБ/с"]
-                },
-                {
-                    id: 2, name: "WD Blue 2TB", category: "storage", price: 5000,
-                    image: "wd_blue.jpg", type: "SATA", capacity: 2000,
-                    critical_specs: ["2 ТБ", "SATA 3", "560 МБ/с"]
-                }
-            ],
-            psus: [
-                {
-                    id: 1, name: "Seasonic Focus 750W", category: "psu", price: 9000,
-                    image: "seasonic_focus.jpg", wattage: 750, efficiency: "80+ Gold",
-                    critical_specs: ["750 Вт", "80+ Gold", "Полумодульный"]
-                },
-                {
-                    id: 2, name: "Corsair RM850x", category: "psu", price: 12000,
-                    image: "corsair_rm850x.jpg", wattage: 850, efficiency: "80+ Gold",
-                    critical_specs: ["850 Вт", "80+ Gold", "Полностью модульный"]
-                }
-            ],
-            cases: [
-                {
-                    id: 1, name: "NZXT H510", category: "case", price: 7000,
-                    image: "nzxt_h510.jpg", form_factor: "ATX", maxGPULength: 360,
-                    critical_specs: ["Mid-Tower", "ATX", "Tempered Glass"]
-                },
-                {
-                    id: 2, name: "Fractal Design Meshify C", category: "case", price: 8500,
-                    image: "fractal_meshify.jpg", form_factor: "ATX", maxGPULength: 315,
-                    critical_specs: ["Mid-Tower", "ATX", "Mesh Front Panel"]
-                }
-            ],
-            coolers: [
-                {
-                    id: 1, name: "Noctua NH-U12S", category: "cooler", price: 6000,
-                    image: "noctua_nh-u12s.jpg", socket: ["AM4", "LGA1700", "LGA1200"],
-                    critical_specs: ["Башенный", "120mm вентилятор", "Низкий шум"]
-                },
-                {
-                    id: 2, name: "Cooler Master Hyper 212", category: "cooler", price: 3500,
-                    image: "coolermaster_hyper212.jpg", socket: ["AM4", "LGA1700"],
-                    critical_specs: ["Башенный", "120mm вентилятор", "4 тепловые трубки"]
-                }
-            ]
-        };
-        
-        return testData[componentType] || [];
-    }
-
-=======
->>>>>>> 0a8b963 (Обновление полного проекта)
     async getComponentDetails(componentId, componentType) {
         const cacheKey = `${componentType}_${componentId}`;
         
@@ -334,12 +201,7 @@ class DataManager {
             } else if (data.id && data.name) {
                 component = data;
             } else {
-<<<<<<< HEAD
-                const testData = this.getTestComponents(componentType + 's');
-                component = testData.find(comp => comp.id === componentId);
-=======
                 component = null;
->>>>>>> 0a8b963 (Обновление полного проекта)
             }
             
             if (component) {
@@ -349,12 +211,7 @@ class DataManager {
             
             return null;
         } catch (error) {
-<<<<<<< HEAD
-            const testData = this.getTestComponents(componentType + 's');
-            return testData.find(comp => comp.id === componentId) || null;
-=======
             return null;
->>>>>>> 0a8b963 (Обновление полного проекта)
         }
     }
 
@@ -791,23 +648,6 @@ class DataManager {
         
         return specs.slice(0, 3);
     }
-<<<<<<< HEAD
-
-    async testAPIConnection() {
-        try {
-            const response = await fetch(`api/components.php?category=cpu&limit=1`);
-            if (response.ok) {
-                const data = await response.json();
-                return true;
-            } else {
-                return false;
-            }
-        } catch (error) {
-            return false;
-        }
-    }
-=======
->>>>>>> 0a8b963 (Обновление полного проекта)
 }
 
 if (typeof window !== 'undefined') {

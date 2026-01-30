@@ -339,10 +339,7 @@
     background: #fdfdfd;
 }
 
-<<<<<<< HEAD
-=======
 
->>>>>>> 0a8b963 (Обновление полного проекта)
 .admin-table td {
     padding: 14px 20px;
     font-size: 14px;
@@ -354,8 +351,6 @@
     border-right: none;
 }
 
-<<<<<<< HEAD
-=======
 .admin-table th:nth-child(6),
 .admin-table td:nth-child(6) {
     width: 120px;
@@ -365,7 +360,6 @@
     white-space: nowrap;
 }
 
->>>>>>> 0a8b963 (Обновление полного проекта)
 .badge {
     padding: 4px 10px;
     border-radius: 4px;
@@ -464,11 +458,7 @@
 .builds-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-<<<<<<< HEAD
-    gap: 15px;
-=======
     gap: 20px;
->>>>>>> 0a8b963 (Обновление полного проекта)
     margin-bottom: 20px;
 }
 
@@ -478,12 +468,9 @@
     padding: 20px;
     border: 1px solid #eaeaea;
     transition: all 0.2s ease;
-<<<<<<< HEAD
-=======
     display: flex;
     flex-direction: column;
     height: 100%;
->>>>>>> 0a8b963 (Обновление полного проекта)
 }
 
 .build-card:hover {
@@ -506,14 +493,11 @@
     color: #2c3e50;
     font-size: 16px;
     font-weight: 600;
-<<<<<<< HEAD
-=======
     flex: 1;
     min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
->>>>>>> 0a8b963 (Обновление полного проекта)
 }
 
 .build-price {
@@ -523,43 +507,11 @@
     border-radius: 12px;
     font-size: 13px;
     font-weight: 600;
-<<<<<<< HEAD
-}
-
-.build-card-body p {
-    margin: 8px 0;
-    color: #555;
-    font-size: 13px;
-    display: flex;
-    justify-content: space-between;
-}
-
-.build-card-body strong {
-    color: #666;
-    font-weight: 500;
-}
-
-.build-card-footer {
-    display: flex;
-    gap: 8px;
-    margin-top: 18px;
-    padding-top: 18px;
-    border-top: 1px solid #eee;
-}
-
-.build-card-footer .btn {
-    flex: 1;
-    padding: 8px 14px;
-    font-size: 12px;
-    justify-content: center;
-}
-=======
     white-space: nowrap;
     margin-left: 10px;
 }
 
 
->>>>>>> 0a8b963 (Обновление полного проекта)
 
 .recent-activity {
     background: white;
@@ -839,13 +791,9 @@
 }
 
 .btn-edit:hover { border-color: #007bff; color: #007bff; }
-<<<<<<< HEAD
-.btn-delete:hover { border-color: #dc3545; color: #dc3545; }
-=======
 
 .btn-delete:hover { border-color: #f3f3f3; color: #f3f3f3; }
 
->>>>>>> 0a8b963 (Обновление полного проекта)
 .btn-toggle:hover { border-color: #ffc107; color: #ffc107; }
 
 .role-select {
@@ -1075,16 +1023,6 @@
     display: flex;
     align-items: center;
     gap: 10px;
-<<<<<<< HEAD
-}
-
-.component-thumb {
-    width: 50px;
-    height: 50px;
-    object-fit: contain;
-    border-radius: 4px;
-    background-color: #f8f9fa;
-=======
     white-space: nowrap;
     overflow: hidden;
 }
@@ -1095,17 +1033,13 @@
     object-fit: cover;
     border-radius: 4px;
     flex-shrink: 0;
->>>>>>> 0a8b963 (Обновление полного проекта)
 }
 
 .component-specs {
     display: flex;
     flex-direction: column;
     gap: 3px;
-<<<<<<< HEAD
-=======
     white-space: nowrap;
->>>>>>> 0a8b963 (Обновление полного проекта)
 }
 
 .status-badge {
@@ -1221,20 +1155,6 @@
     padding: 20px;
 }
 
-<<<<<<< HEAD
-.build-card {
-    background: white;
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    transition: transform 0.2s, box-shadow 0.2s;
-    border: 1px solid #e9ecef;
-    margin-bottom: 20px;
-    overflow: hidden;
-}
-
-=======
->>>>>>> 0a8b963 (Обновление полного проекта)
 .build-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 16px rgba(0,0,0,0.12);
@@ -1249,10 +1169,7 @@
     border-bottom: 1px solid #eee;
 }
 
-<<<<<<< HEAD
-=======
 
->>>>>>> 0a8b963 (Обновление полного проекта)
 .build-id {
     background: #f8f9fa;
     color: #6c757d;
@@ -1268,12 +1185,8 @@
 }
 
 .build-preview-row {
-<<<<<<< HEAD
-    display: flex;
-=======
     min-height: 230px;
     align-content: flex-start;
->>>>>>> 0a8b963 (Обновление полного проекта)
     justify-content: space-between;
     margin-bottom: 20px;
     gap: 8px;
@@ -1361,12 +1274,7 @@
 }
 
 .build-actions {
-<<<<<<< HEAD
-    display: flex;
-    gap: 10px;
-=======
     margin-top: auto; 
->>>>>>> 0a8b963 (Обновление полного проекта)
     padding-top: 15px;
     border-top: 1px solid #eee;
 }
@@ -1401,22 +1309,14 @@
     border-radius: 8px;
 }
 
-<<<<<<< HEAD
-.build-preview-row {
-=======
 /* .build-preview-row {
->>>>>>> 0a8b963 (Обновление полного проекта)
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
     margin-bottom: 15px;
     min-height: 60px;
     align-items: center;
-<<<<<<< HEAD
-}
-=======
 } */
->>>>>>> 0a8b963 (Обновление полного проекта)
 
 .no-components {
     text-align: center;
