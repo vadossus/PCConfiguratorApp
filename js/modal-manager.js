@@ -1,639 +1,337 @@
-class ModalManager {
-    constructor(dataManager, configurator) {
-        this.dataManager = dataManager;
-        this.configurator = configurator;
-        this.currentComponentType = null;
-        this.currentFilters = {};
-        this.currentPage = 1;
-        this.itemsPerPage = 5;
-        
-        this.categoryMapping = {
-            'cpus': 'cpus',
-            'motherboards': 'motherboards',
-            'rams': 'rams',
-            'gpus': 'gpus',
-            'storages': 'storages',
-            'psus': 'psus',
-            'cases': 'cases',
-            'coolers': 'coolers'
-        };
+'use strict';
 
-        this.init();
-    }
+const ModalManager = (() => {
+    let _data = null;
+    let _config = null;
+    let _type = null;
+    let _filters = {};
+    let _page = 1;
+    const _per_page = 5;
 
-    init() {
-        this.bindModalEvents();
-    }
+    const TYPE_NAMES = Object.freeze({
+        cpus: 'процессор', motherboards: 'материнскую плату', rams: 'оперативную память',
+        gpus: 'видеокарту', storages: 'накопитель', psus: 'блок питания',
+        cases: 'корпус', coolers: 'охлаждение'
+    });
 
-    bindModalEvents() {
-        const modal = document.getElementById('component-modal');
-        const closeButton = modal.querySelector('.close-button');
-        
-        if (closeButton) {
-            closeButton.addEventListener('click', () => {
-                this.hide_component_modal();
-            });
-        }
-        
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                this.hide_component_modal();
-            }
-        });
-    }
+    const TYPE_SINGULAR = Object.freeze({
+        cpus: 'cpus', motherboards: 'motherboards', rams: 'rams',
+        gpus: 'gpus', storages: 'storages', psus: 'psus',
+        cases: 'cases', coolers: 'coolers'
+    });
 
-    async showComponentModal(componentType, filters = {}) {
-        this.currentComponentType = componentType;
-        
-        this.currentFilters = this.getSmartFilters(componentType, filters);
-        this.currentPage = 1;
-        
+    const CATEGORY_FOLDER = Object.freeze({
+        cpu: 'cpus', cpus: 'cpus', motherboard: 'motherboards', motherboards: 'motherboards',
+        ram: 'rams', rams: 'rams', gpu: 'gpus', gpus: 'gpus',
+        storage: 'storages', storages: 'storages', psu: 'psus', psus: 'psus',
+        cooler: 'coolers', coolers: 'coolers', case: 'cases', cases: 'cases'
+    });
+
+    const _bind = () => {
         const modal = document.getElementById('component-modal');
         if (!modal) return;
-        
-        modal.classList.remove('hidden');
-        
-        const modalTitle = document.getElementById('modal-title');
-        if (modalTitle) {
-            const typeNames = {
-                'cpus': 'процессор',
-                'motherboards': 'материнскую плату',
-                'rams': 'оперативную память',
-                'gpus': 'видеокарту',
-                'storages': 'накопитель',
-                'psus': 'блок питания',
-                'cases': 'корпус',
-                'coolers': 'охлаждение'
-            };
-            modalTitle.textContent = `Выберите ${typeNames[componentType] || componentType}`;
-        }
-        
-        const modalBody = document.getElementById('modal-body');
-        if (modalBody) {
-            modalBody.innerHTML = `
-                <div class="modal-loading">
-                    <div class="spinner"></div>
-                    <p>Загрузка компонентов...</p>
-                </div>
-            `;
-        }
-        
-        await this.loadComponentPage(componentType, 1, this.currentFilters);
-    }
 
-    getSmartFilters(componentType, filters) {
-        const smartFilters = {};
-        
-        switch(componentType) {
-            case 'motherboards':
-                if (filters.socket) {
-                    smartFilters.socket = filters.socket;
-                }
-                break;
-                
-            case 'rams':
-                break;
-                
-            case 'coolers':
-                break;
-                
-            case 'cases':
-                break;
-                
-            case 'psus':
-                if (filters.min_wattage) {
-                    smartFilters.min_wattage = filters.min_wattage;
-                }
-                break;
-        }
-        
-        return smartFilters;
-    }
+        const close_btn = modal.querySelector('.close-button');
+        if (close_btn) close_btn.addEventListener('click', _hide);
 
-    async loadComponentPage(componentType, page = 1, filters = {}) {
-        try {
-            
-            const pageData = await this.dataManager.getComponentsPage(
-                componentType, 
-                page, 
-                filters, 
-                this.itemsPerPage
-            );
-            
-            if (!pageData) {
-                return;
-            }
-            
-            let components = [];
-            
-            if (pageData.components && Array.isArray(pageData.components)) {
-                components = pageData.components;
-            } else if (Array.isArray(pageData)) {
-                components = pageData;
-            } else if (pageData.success && pageData.components) {
-                components = pageData.components;
-            } else if (pageData.data && Array.isArray(pageData.data)) {
-                components = pageData.data;
-            }
-            
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) _hide();
+        });
 
-            if (components.length > this.itemsPerPage) {
-                components = components.slice(0, this.itemsPerPage);
-            }
-            
-            components = components.map(component => {
-                const isCompatible = this.checkCompatibility(component);
-                return {
-                    ...component,
-                    isCompatible: isCompatible
-                };
-            });
-            
-             this.renderComponents(components, {
-                currentPage: pageData.currentPage || page,
-                totalPages: pageData.totalPages || Math.ceil(components.length / this.itemsPerPage) || 1,
-                totalItems: pageData.totalItems || components.length,
-                hasNext: pageData.hasNext || (page < (pageData.totalPages || 1)),
-                hasPrev: pageData.hasPrev || (page > 1)
-            });
-            
-        } catch (error) {
-            this.renderError('ошибка: ' + error.message);
-        }
-    }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) _hide();
+        });
 
-    renderComponents(components, pageData) {
-        const modalBody = document.getElementById('modal-body');
-    
-        if (!Array.isArray(components)) {
-            components = [];
-        }
-        
-        let html = `
-            <div class="components-modal-content">
-                <div class="components-search">
-                    <input type="text" 
-                        id="modal-search-input" 
-                        placeholder="Поиск ${this.getComponentTypeName(this.currentComponentType)}..." 
-                        class="search-input">
-                    <button onclick="window.modalManager.handleSearch()" class="btn-search">
-                        Найти
-                    </button>
-                </div>
-        `;
-        
-        html += `
-                <div class="components-list-info">
-                    Найдено: ${pageData.totalItems} компонентов
-                </div>
-                
-                <div class="components-grid" id="modal-components-list">
-        `;
-        
-        if (!components || components.length === 0) {
-            html += `
-                <div class="no-components">
-                    <div class="no-components-icon">😕</div>
-                    <h4>Компоненты не найдены</h4>
-                    <p>Попробуйте изменить поисковый запрос или фильтры</p>
-                </div>
-            `;
-        } else {
-            components.forEach(component => {
-                if (component) {
-                    html += this.renderComponentCard(component);
-                }
-            });
-        }
+        const content = modal.querySelector('.modal-content');
+        if (content) content.addEventListener('click', (e) => e.stopPropagation());
+    };
 
-        const hasActiveFilters = Object.keys(this.currentFilters).length > 0 && 
-                            !(Object.keys(this.currentFilters).length === 1 && this.currentFilters.search);
-        
-        if (hasActiveFilters) {
-            html += `
-                <div class="filter-clear-section">
-                    <button class="btn-clear-filters" onclick="window.modalManager.clearFilters()">
-                        <span class="clear-icon">×</span>
-                        Очистить фильтры
-                    </button>
-                </div>
-            `;
-        }
-        
-        
-        html += `
-                </div>
-        `;
-        
-        if (pageData.totalItems > 0) {
-            html += this.renderPagination(pageData);
-        }
-        
-        html += `</div>`;
-        
-        modalBody.innerHTML = html;
-
-        this.currentPage = pageData.currentPage || this.currentPage;
-        
-        const searchInput = document.getElementById('modal-search-input');
-        if (searchInput) {
-            searchInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    this.handleSearch();
-                }
-            });
-        }
-    }
-    renderComponentCard(component) {    
-        const price = component.price ? this.formatPrice(component.price) : 'Цена не указана';
-        const name = component.name || 'Без названия';
-        const specs = component.critical_specs ? 
-            (Array.isArray(component.critical_specs) ? 
-                component.critical_specs.slice(0, 2).join(' • ') : 
-                component.critical_specs) : 
-            '';
-        
-        const currentType = this.currentComponentType;
-        const componentId = component.id;
-        
-        const isCompatible = this.checkCompatibility(component);
-        const compatibilityClass = isCompatible ? 'compatible' : 'incompatible';
-        
-        let compatibilityText = 'Совместим';
-        let compatibilityIcon = '✓';
-        
-        if (!isCompatible) {
-            compatibilityIcon = '⚠';
-            
-            const currentBuild = window.configurator?.currentBuild;
-            
-            if (currentType === 'rams' && currentBuild?.motherboards?.memory_type && component.type) {
-                const mbMemoryType = currentBuild.motherboards.memory_type;
-                const ramType = component.type;
-                
-                if (ramModules > mbSlots) {
-                    compatibilityText = `Требуется ${ramModules} слота, на плате только ${mbSlots}`;
-                } else {
-                    compatibilityText = 'Несовместимый тип памяти';
-                }
-
-                if ((mbMemoryType.includes('DDR4') && ramType.includes('DDR5')) || 
-                    (mbMemoryType.includes('DDR5') && ramType.includes('DDR4'))) {
-                    compatibilityText = `Несовместимо: материнская плата поддерживает ${mbMemoryType}`;
-                } else {
-                    compatibilityText = `Несовместимо с материнской платой (${mbMemoryType})`;
-                }
-            } 
-            else if (currentType === 'motherboards' && currentBuild?.cpus?.socket && component.socket) {
-                compatibilityText = `Несовместимо: процессор требует сокет ${currentBuild.cpus.socket}`;
-            }
-            else if (currentType === 'cpus' && currentBuild?.motherboards?.socket && component.socket) {
-                compatibilityText = `Несовместимо: плата требует сокет ${currentBuild.motherboards.socket}`;
-            } 
-            else if (currentType === 'coolers' && currentBuild?.cpus?.socket && component.socket) {
-                compatibilityText = `Возможно не поддерживает сокет ${currentBuild.cpus.socket}`;
-            }
-            else if (currentType === 'cases' && currentBuild?.motherboards?.form_factor) {
-                compatibilityText = `Проверьте поддержку платы ${currentBuild.motherboards.form_factor}`;
-            }
-            else {
-                compatibilityText = 'Возможна несовместимость';
-            }
-        }
-        
-        return `
-            <div class="component-card-modal ${compatibilityClass}" 
-                onclick="window.modalManager.selectComponent(${componentId}, '${currentType}')">
-                <div class="component-card-image">
-                    <img src="${this.getComponentImagePath(component)}" alt="${name}" 
-                        onerror="this.onerror=null; this.parentElement.innerHTML='${this.getComponentIcon(component)}';">
-                </div>
-                <div class="component-card-info">
-                    <div class="component-card-name">${name}</div>
-                    ${specs ? `<div class="component-card-specs">${specs}</div>` : ''}
-                    <div class="compatibility-indicator ${isCompatible ? 'compatible' : 'incompatible'}">
-                        ${compatibilityIcon} ${compatibilityText}
-                    </div>
-                </div>
-                <div class="component-card-price-section">
-                    <div class="component-card-price">${price} ₽</div>
-                    <button class="btn-select-component" 
-                            onclick="event.stopPropagation(); window.modalManager.selectComponent(${componentId}, '${currentType}')">
-                        ${isCompatible ? 'Выбрать' : 'Выбрать с предупреждением'}
-                    </button>
-                </div>
-            </div>
-        `;
-    }
-
-    checkCompatibility(component) {
-        const componentData = component.component || component;
-        if (!window.configurator) return true;
-        const currentBuild = window.configurator.currentBuild;
-
-
-        if (this.currentComponentType === 'motherboards' && currentBuild?.cpus?.socket && componentData.socket) {
-            const cpuSocket = currentBuild.cpus.socket.toUpperCase();
-            const mbSocket = String(componentData.socket).toUpperCase();
-            
-            if (mbSocket !== cpuSocket && !mbSocket.includes(cpuSocket) && !cpuSocket.includes(mbSocket)) {
-                return false;
-            }
-        }
-
-    if (this.currentComponentType === 'cpus' && currentBuild?.motherboards?.socket && componentData.socket) {
-        const mbSocket = currentBuild.motherboards.socket.toUpperCase();
-        const cpuSocket = String(componentData.socket).toUpperCase();
-        
-        if (cpuSocket !== mbSocket && !cpuSocket.includes(mbSocket) && !mbSocket.includes(cpuSocket)) {
-            return false;
-        }
-    }
-
-        if (this.currentComponentType === 'rams' && currentBuild?.motherboards?.memory_type) {
-            const mbMemoryType = currentBuild.motherboards.memory_type.toUpperCase();
-            const ramType = (componentData.type || componentData.memory_type || "").toUpperCase();
-
-            if (ramType) {
-                const mbIsDDR4 = mbMemoryType.includes('DDR4');
-                const mbIsDDR5 = mbMemoryType.includes('DDR5');
-                const ramIsDDR4 = ramType.includes('DDR4');
-                const ramIsDDR5 = ramType.includes('DDR5');
-
-                if ((mbIsDDR4 && ramIsDDR5) || (mbIsDDR5 && ramIsDDR4)) {
-                    return false; 
-                }
-            }
-        }
-
-        if (this.currentComponentType === 'motherboards' && currentBuild?.rams) {
-            const mbType = (componentData.memory_type || "").toUpperCase();
-            const ramType = (currentBuild.rams.type || currentBuild.rams.memory_type || "").toUpperCase();
-
-            if (mbType && ramType) {
-                if ((mbType.includes('DDR4') && ramType.includes('DDR5')) || 
-                    (mbType.includes('DDR5') && ramType.includes('DDR4'))) {
-                    return false;
-                }
-            }
-        }
-        
-        if (this.currentComponentType === 'coolers' && currentBuild?.cpus?.socket && componentData.socket) {
-            const cpuSocket = currentBuild.cpus.socket.toUpperCase();
-            let coolerSocket = componentData.socket;
-            
-            let coolerSockets = [];
-            if (typeof coolerSocket === 'string') {
-                coolerSockets = coolerSocket.split(/[,|]/).map(s => s.trim().toUpperCase());
-            } else if (Array.isArray(coolerSocket)) {
-                coolerSockets = coolerSocket.map(s => String(s).toUpperCase());
-            } else {
-                coolerSockets = [String(coolerSocket).toUpperCase()];
-            }
-            
-            const isCompatible = coolerSockets.some(socket => 
-                socket === cpuSocket || 
-                socket.includes(cpuSocket) || 
-                cpuSocket.includes(socket)
-            );
-            
-            if (!isCompatible) {
-                return false;
-            }
-        }
-        
-        if (this.currentComponentType === 'cases' && currentBuild?.motherboards?.form_factor && componentData.supported_form_factors) {
-            const mbFormFactor = currentBuild.motherboards.form_factor.toUpperCase();
-            let caseFormFactors = componentData.supported_form_factors;
-            
-            if (typeof caseFormFactors === 'string') {
-                caseFormFactors = caseFormFactors.split(/[,|]/).map(f => f.trim().toUpperCase());
-            } else if (Array.isArray(caseFormFactors)) {
-                caseFormFactors = caseFormFactors.map(f => String(f).toUpperCase());
-            } else {
-                caseFormFactors = [String(caseFormFactors).toUpperCase()];
-            }
-            
-            const isCompatible = caseFormFactors.some(factor => {
-                const factor_upper = factor.toUpperCase();
-                if (factor_upper === mbFormFactor) return true;
-                
-                const compability_cases = {
-                    'E-ATX': ['E-ATX', 'ATX', 'MICRO-ATX', 'MINI-ITX'],
-                    'ATX': ['ATX', 'MICRO-ATX', 'MINI-ITX'],
-                    'MICRO-ATX': ['MICRO-ATX', 'MINI-ITX'],
-                    'MINI-ITX': ['MINI-ITX']
-                };
-                
-                if (compability_cases[factor_upper]) {
-                    return compability_cases[factor_upper].includes(mbFormFactor);
-                }
-                
-                return false;
-            });
-            
-            if (!isCompatible) {
-                return false;
-            }
-        }
-        
-        return true;
-    }
-
-    async selectComponent(componentId) {
-        const componentType = String(this.currentComponentType).trim();
-        
-        try {
-            const apiCategory = this.categoryMapping[componentType] || 
-                            componentType.replace(/s$/, '');
-            
-            const componentData = await this.dataManager.getComponentDetails(componentId, apiCategory);
-            
-            if (!componentData) {
-                throw new Error('компонент не найден');
-            }
-            
-            if (!componentData.category) {
-                componentData.category = componentType.replace(/s$/, '');
-            }
-            
-            this.hide_component_modal();
-            
-            setTimeout(() => {
-                if (window.configurator && window.configurator.selectComponent) {
-                    window.configurator.selectComponent(componentType, componentData);
-                }
-            }, 100);
-            
-        } catch (error) {
-            alert(`ошибка выбора компонента: ${error.message}`);
-        }
-    }
-
-    handleSearch() {
-        const searchInput = document.getElementById('modal-search-input');
-        if (!searchInput) return;
-        
-        const query = searchInput.value.trim();
-        
-        if (query) {
-            this.currentFilters.search = query;
-        } else {
-            delete this.currentFilters.search;
-        }
-        
-        this.loadComponentPage(this.currentComponentType, 1, this.currentFilters);
-    }
-
-    clearFilters() {
-        this.currentFilters = {};
-        this.loadComponentPage(this.currentComponentType, 1, this.currentFilters);
-    }
-
-    renderPagination(pageData) {
-        return `
-            <div class="modal-pagination">
-                <button class="btn-pagination ${!pageData.hasPrev ? 'disabled' : ''}" 
-                        onclick="window.modalManager.prevPage()" 
-                        ${!pageData.hasPrev ? 'disabled' : ''}>
-                    ←
-                </button>
-                
-                <span class="page-info">
-                    ${pageData.currentPage} из ${pageData.totalPages}
-                </span>
-                
-                <button class="btn-pagination ${!pageData.hasNext ? 'disabled' : ''}" 
-                        onclick="window.modalManager.nextPage()" 
-                        ${!pageData.hasNext ? 'disabled' : ''}>
-                    →
-                </button>
-            </div>
-        `;
-    }
-
-    async nextPage() {
-        if (this.currentPage < 100) {
-            this.currentPage++;
-            await this.loadComponentPage(this.currentComponentType, this.currentPage, this.currentFilters);
-        }
-    }
-
-    async prevPage() {
-        if (this.currentPage > 1) {
-            this.currentPage--;
-            await this.loadComponentPage(this.currentComponentType, this.currentPage, this.currentFilters);
-        }
-    }
-
-    renderError(message) {
-        const modalBody = document.getElementById('modal-body');
-        modalBody.innerHTML = `
-            <div class="modal-error">
-                <div class="error-icon">⚠️</div>
-                <h3>Ошибка</h3>
-                <p>${message}</p>
-                <button onclick="window.modalManager.retryLoad()" class="btn-retry">
-                    Попробовать снова
-                </button>
-            </div>
-        `;
-    }
-
-    async retryLoad() {
-        await this.loadComponentPage(this.currentComponentType, this.currentPage, this.currentFilters);
-    }
-
-    getComponentTypeName(type) {
-        const names = {
-            'cpus': 'процессор',
-            'motherboards': 'материнскую плату', 
-            'rams': 'оперативную память',
-            'gpus': 'видеокарту',
-            'storages': 'накопитель',
-            'psus': 'блок питания',
-            'cases': 'корпус',
-            'coolers': 'охлаждение'
-        };
-        return names[type] || type;
-    }
-
-    getComponentIcon(component) {
-        const type = component.category || '';
-        const iconMap = {
-            'cpu': '⚡',
-            'motherboard': '🔌',
-            'ram': '💾',
-            'gpu': '🎮',
-            'storage': '💿',
-            'psu': '🔋',
-            'cooler': '❄️',
-            'case': '🖥️'
-        };
-        return iconMap[type] || '❓';
-    }
-
-    getComponentImagePath(component) {        
-        if (window.dataManager && window.dataManager.getComponentImagePath) {
-            return window.dataManager.getComponentImagePath(component);
-        }
-        
-        if (!component || !component.image) {
-            return 'source/icons/default_component.png';
-        }
-        
-        let imagePath = component.image;
-        
-        let categoryFolder = this.getCategoryFolder(component);
-        
-        return `source/${categoryFolder}/${imagePath}`;
-    }
-
-    getCategoryFolder(component) {
-        if (!component) return 'components';
-        
-        const typeMap = {
-            'cpu': 'cpus',
-            'процессор': 'cpus',
-            'motherboard': 'motherboards',
-            'материнская плата': 'motherboards',
-            'ram': 'rams',
-            'оперативная память': 'rams',
-            'gpu': 'gpus',
-            'видеокарта': 'gpus',
-            'storage': 'storages',
-            'накопитель': 'storages',
-            'psu': 'psus',
-            'блок питания': 'psus',
-            'case': 'cases',
-            'корпус': 'cases',
-            'cooler': 'coolers',
-            'охлаждение': 'coolers'
-        };
-        
-        if (component.category) {
-            return typeMap[component.category.toLowerCase()] || component.category;
-        }
-        
-        if (this.currentComponentType) {
-            return this.currentComponentType; 
-        }
-        
-        return 'components';
-    }
-
-    formatPrice(price) {
-        if (!price) return '0';
-        return new Intl.NumberFormat('ru-RU').format(price);
-    }
-
-    hide_component_modal() {
+    const _hide = () => {
         const modal = document.getElementById('component-modal');
-        modal.classList.add('hidden');
-        this.currentComponentType = null;
-        this.currentFilters = {};
-        this.currentPage = 1;
-    }
-}
+        if (modal) modal.classList.add('hidden');
+        _type = null;
+        _filters = {};
+        _page = 1;
+    };
+
+    const _show = (type, filters = {}) => {
+        _type = type;
+        _filters = {};
+        _page = 1;
+
+        if (type === 'psus' && filters.min_wattage) {
+            _filters.min_wattage = filters.min_wattage;
+        }
+        
+        if (type === 'motherboards' && filters.socket) {
+            _filters.socket = filters.socket;
+        }
+
+        const modal = document.getElementById('component-modal');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+
+        const title = document.getElementById('modal-title');
+        if (title) title.textContent = `Выберите ${TYPE_NAMES[type] || type}`;
+
+        const body = document.getElementById('modal-body');
+        if (body) body.innerHTML = '<div class="modal-loading"><div class="spinner"></div><p>Загрузка компонентов...</p></div>';
+
+        _load_page(1);
+    };
+
+    const _load_page = async (page) => {
+        try {
+            const page_data = await _data.getComponentsPage(_type, page, _filters);
+            let components = [];
+            if (page_data?.components) components = page_data.components;
+            else if (Array.isArray(page_data)) components = page_data;
+
+            if (components.length === 0 && Object.keys(_filters).length > 0) {
+                const no_filter_data = await _data.getComponentsPage(_type, page, {});
+                if (no_filter_data?.components) components = no_filter_data.components;
+                else if (Array.isArray(no_filter_data)) components = no_filter_data;
+            }
+
+            if (components.length > _per_page) components = components.slice(0, _per_page);
+
+            components = components.map(c => ({
+                ...c,
+                compatible: _check_one(c, _type)
+            }));
+
+            _render(components, {
+                current: page_data?.currentPage || page,
+                total: page_data?.totalPages || Math.ceil(components.length / _per_page) || 1,
+                items: page_data?.totalItems || components.length,
+                next: page_data?.hasNext || (page < (page_data?.totalPages || 1)),
+                prev: page_data?.hasPrev || (page > 1)
+            });
+        } catch (e) {
+            const body = document.getElementById('modal-body');
+            if (body) {
+                body.innerHTML = `<div class="modal-error"><h3>Ошибка загрузки</h3><p>${e.message || 'Не удалось загрузить компоненты'}</p><button onclick="ModalManager.retry()" class="btn-retry">Попробовать снова</button></div>`;
+            }
+        }
+    };
+
+    const _check_one = (component, type) => {
+        const data = component.component || component;
+        if (!_config) return true;
+        const build = _config.build;
+        const storages = build.storages || [];
+
+        if (type === 'motherboards' && build?.cpus) {
+            if (data.socket && data.socket.toUpperCase() !== build.cpus.socket.toUpperCase()) return false;
+            
+            if (data.memory_type && build.cpus.memory_type) {
+                const mb_type = data.memory_type.toUpperCase();
+                const cpu_type = build.cpus.memory_type.toUpperCase();
+                if (!cpu_type.includes(mb_type) && !mb_type.includes(cpu_type)) return false;
+            }
+            
+            if (build.rams) {
+                const mb_type = (data.memory_type || '').toUpperCase();
+                const ram_type = (build.rams.type || build.rams.memory_type || '').toUpperCase();
+                if (mb_type && ram_type && ((mb_type.includes('DDR4') && ram_type.includes('DDR5')) || (mb_type.includes('DDR5') && ram_type.includes('DDR4')))) return false;
+            }
+        }
+
+        if (type === 'cpus' && build?.motherboards?.socket && data.socket) {
+            if (data.socket.toUpperCase() !== build.motherboards.socket.toUpperCase()) return false;
+        }
+
+        if (type === 'rams') {
+            const ram_type = (data.type || data.memory_type || '').toUpperCase();
+            
+            if (build?.cpus?.memory_type) {
+                const cpu_types = build.cpus.memory_type.toUpperCase();
+                if (ram_type && !cpu_types.includes(ram_type)) return false;
+            }
+
+            if (build?.motherboards?.memory_type) {
+                const mb_type = build.motherboards.memory_type.toUpperCase();
+                if (ram_type && ((mb_type.includes('DDR4') && ram_type.includes('DDR5')) || (mb_type.includes('DDR5') && ram_type.includes('DDR4')))) return false;
+                
+                const mb_slots = build.motherboards.memory_slots || 4;
+                if (mb_slots && data.modules && parseInt(data.modules) > mb_slots) return false;
+            }
+        }
+
+        if (type === 'storages' && build?.motherboards) {
+            if (data.type?.toUpperCase().includes('M.2')) {
+                const existing = storages.filter(s => s.type?.toUpperCase().includes('M.2')).length;
+                const m2_slots = build.motherboards.m2_slots || 1;
+                if (existing >= m2_slots) return false;
+            } else {
+                const existing = storages.filter(s => !s.type?.toUpperCase().includes('M.2')).length;
+                const sata_ports = build.motherboards.sata_ports || 4;
+                if (existing >= sata_ports) return false;
+            }
+        }
+
+        if (type === 'coolers' && build?.cpus?.socket && data.socket_compatibility) {
+            const sockets = data.socket_compatibility.toUpperCase().split(/[,|]/).map(s => s.trim());
+            if (!sockets.includes(build.cpus.socket.toUpperCase())) return false;
+            if (build.cpus.tdp && data.tdp && parseInt(data.tdp) < parseInt(build.cpus.tdp)) return false;
+        }
+
+        if (type === 'cases' && build?.motherboards?.form_factor && data.supported_motherboards) {
+            const mb_ff = build.motherboards.form_factor.toUpperCase();
+            const case_ffs = data.supported_motherboards.toUpperCase().split(/[,|]/).map(f => f.trim());
+            const hierarchy = { 'E-ATX': ['E-ATX','ATX','MICRO-ATX','MINI-ITX'], 'ATX': ['ATX','MICRO-ATX','MINI-ITX'], 'MICRO-ATX': ['MICRO-ATX','MINI-ITX'], 'MINI-ITX': ['MINI-ITX'] };
+            let ok = false;
+            for (const f of case_ffs) { if (f === mb_ff || (hierarchy[f] && hierarchy[f].includes(mb_ff))) { ok = true; break; } }
+            if (!ok) return false;
+        }
+
+        if (type === 'psus') {
+            const total = _config.calc_power ? _config.calc_power() : 0;
+            if (total > 0 && data.wattage && parseInt(data.wattage) < total) return false;
+        }
+
+        return true;
+    };
+
+    const _render = (components, page_data) => {
+        const body = document.getElementById('modal-body');
+        if (!body) return;
+
+        const type_name = TYPE_NAMES[_type] || _type;
+
+        let html = `<div class="components-modal-content">
+            <div class="components-search">
+                <input type="text" id="modal-search-input" placeholder="Поиск ${type_name}..." class="search-input">
+                <button onclick="ModalManager.search()" class="btn-search">Найти</button>
+            </div>
+            <div class="components-list-info">Найдено: ${page_data.items} компонентов</div>
+            <div class="components-grid" id="modal-components-list">`;
+
+        if (!components || !components.length) {
+            html += `<div class="no-components"><h4>Компоненты не найдены</h4><p>Попробуйте изменить поисковый запрос или фильтры</p></div>`;
+        } else {
+            components.forEach(c => { if (c) html += _card(c); });
+        }
+
+        const has_filters = Object.keys(_filters).length > 0 && !(Object.keys(_filters).length === 1 && _filters.search);
+        if (has_filters) {
+            html += `<div class="filter-clear-section"><button class="btn-clear-filters" onclick="ModalManager.clearFilters()"><span class="clear-icon">&times;</span> Очистить фильтры</button></div>`;
+        }
+
+        html += '</div>';
+        if (page_data.items > 0) html += _pagination(page_data);
+        html += '</div>';
+        body.innerHTML = html;
+
+        _page = page_data.current;
+
+        const search_input = document.getElementById('modal-search-input');
+        if (search_input) {
+            search_input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') _search();
+            });
+        }
+    };
+
+    const _card = (component) => {
+        const price = component.price ? new Intl.NumberFormat('ru-RU').format(component.price) : '0';
+        const name = component.name || 'Без названия';
+        const id = component.component_id || component.id;
+        const ok = component.compatible;
+        const cls = ok ? 'compatible' : 'incompatible';
+        const text = ok ? 'Совместим' : 'Несовместим';
+        const img = _get_image(component);
+
+        let specs = '';
+        const parts = [];
+        if (component.socket) parts.push(`Сокет: ${component.socket}`);
+        if (component.memory_type) parts.push(`${component.memory_type}`);
+        if (component.capacity) parts.push(`${component.capacity} ГБ`);
+        if (component.wattage) parts.push(`${component.wattage}W`);
+        if (component.type) parts.push(component.type);
+        if (component.cores) parts.push(`${component.cores} ядер`);
+        if (component.supported_motherboards) parts.push(`${component.supported_motherboards}`);
+        if (component.memory_size) parts.push(`${component.memory_size} ГБ`);
+        if (component.chipset) parts.push(component.chipset);
+        specs = parts.slice(0, 2).join(' | ');
+
+        return `<div class="component-card-modal ${cls}" onclick="ModalManager.select(${id}, '${_type}')">
+            <div class="component-card-image"><img src="${img}" alt="${name}" onerror="this.src='source/icons/component_placeholder.png';"></div>
+            <div class="component-card-info">
+                <div class="component-card-name"><a href="component.html?id=${id}&type=${_type}" class="component-link" onclick="event.stopPropagation()">${name}</a></div>
+                ${specs ? `<div class="component-card-specs">${specs}</div>` : ''}
+                <div class="compatibility-indicator ${cls}">${text}</div>
+            </div>
+            <div class="component-card-price-section">
+                <div class="component-card-price">${price} Р</div>
+                <button class="btn-select-component" onclick="event.stopPropagation(); ModalManager.select(${id}, '${_type}')">${ok ? 'Выбрать' : 'Всё равно выбрать'}</button>
+            </div>
+        </div>`;
+    };
+
+    const _get_image = (component) => {
+        if (_data?.getComponentImagePath) return _data.getComponentImagePath(component);
+        if (!component?.image) return 'source/icons/default_component.png';
+        const path = component.image.trim();
+        if (path.startsWith('http')) return path;
+        const folder = _get_folder(component);
+        return `source/${folder}/${path}`;
+    };
+
+    const _get_folder = (component) => {
+        if (!component) return 'components';
+        if (component.category) return CATEGORY_FOLDER[component.category.toLowerCase()] || component.category;
+        return _type || 'components';
+    };
+
+    const _pagination = (data) => `
+        <div class="modal-pagination">
+            <button class="btn-pagination ${!data.prev ? 'disabled' : ''}" onclick="ModalManager.prev()" ${!data.prev ? 'disabled' : ''}>&larr;</button>
+            <span class="page-info">${data.current} из ${data.total}</span>
+            <button class="btn-pagination ${!data.next ? 'disabled' : ''}" onclick="ModalManager.next()" ${!data.next ? 'disabled' : ''}>&rarr;</button>
+        </div>`;
+
+    const _search = () => {
+        const input = document.getElementById('modal-search-input');
+        if (!input) return;
+        const q = input.value.trim();
+        if (q) _filters.search = q; else delete _filters.search;
+        _load_page(1);
+    };
+
+    const _clear = () => { _filters = {}; _load_page(1); };
+
+    const _select = async (id, type) => {
+        const actual_type = type || _type;
+        try {
+            const res = await fetch(`api/components.php?id=${id}&category=${actual_type}`);
+            const data = await res.json();
+            if (!data.success || !data.component) throw new Error('Компонент не найден');
+            const c = data.component;
+            if (c.component_id) c.id = c.component_id;
+            if (!c.category) c.category = actual_type.replace(/s$/, '');
+            _hide();
+            setTimeout(() => { if (_config?.selectComponent) _config.selectComponent(actual_type, c); }, 100);
+        } catch (e) { alert(`Ошибка выбора: ${e.message}`); }
+    };
+
+    const _init = (data_manager, configurator) => {
+        _data = data_manager;
+        _config = configurator;
+        _bind();
+    };
+
+    return Object.freeze({
+        init: _init,
+        showComponentModal: _show,
+        hideComponentModal: _hide,
+        search: _search,
+        select: _select,
+        prev: () => { if (_page > 1) _load_page(_page - 1); },
+        next: () => _load_page(_page + 1),
+        retry: () => _load_page(_page),
+        clearFilters: _clear
+    });
+})();
 
 window.ModalManager = ModalManager;

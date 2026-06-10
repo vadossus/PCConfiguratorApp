@@ -1,170 +1,119 @@
-class PaginationManager {
-    constructor() {
-        this.currentPage = new Map();
-        this.totalPages = new Map();
-        this.itemsPerPage = 5;
-        this.pageCache = new Map(); 
-        this.allComponentsCache = new Map(); 
-    }
+'use strict';
 
-    async loadComponentPage(componentType, page = 1, filters = {}) {
+const PaginationManager = (() => {
+    const _current = new Map();
+    const _total = new Map();
+    const _page_cache = new Map();
+    const _all_cache = new Map();
+    const _per_page = 5;
+
+    const loadComponentPage = async (type, page = 1, filters = {}) => {
         try {
-            const cacheKey = this.getCacheKey(componentType, page, filters);
-            
-            if (this.pageCache.has(cacheKey)) {
-                return this.pageCache.get(cacheKey);
-            }
+            const key = _cache_key(type, page, filters);
+            if (_page_cache.has(key)) return _page_cache.get(key);
 
-            
-            const components = await this.getAllComponents(componentType);
+            const all = await _get_all(type);
+            if (!all.length) return _empty_page();
 
-            if (components.length === 0) {
-                return this.getEmptyPageData();
-            }
-            const filteredComponents = this.applyFilters(components, filters);
+            const filtered = _apply_filters(all, filters);
+            const start = (page - 1) * _per_page;
+            const end = start + _per_page;
+            const paginated = filtered.slice(start, end);
+            const total_pages = Math.ceil(filtered.length / _per_page);
+            const total_items = filtered.length;
 
-            const startIndex = (page - 1) * this.itemsPerPage;
-            const endIndex = startIndex + this.itemsPerPage;
-            const paginatedComponents = filteredComponents.slice(startIndex, endIndex);
-            
-            const totalPages = Math.ceil(filteredComponents.length / this.itemsPerPage);
-            const totalItems = filteredComponents.length;
-
-            const pageData = {
-                components: paginatedComponents,
+            const result = {
+                components: paginated,
                 currentPage: page,
-                totalPages: totalPages,
-                totalItems: totalItems,
-                hasNext: page < totalPages,
+                totalPages: total_pages,
+                totalItems: total_items,
+                hasNext: page < total_pages,
                 hasPrev: page > 1,
-                itemsPerPage: this.itemsPerPage
+                itemsPerPage: _per_page
             };
 
-            this.pageCache.set(cacheKey, pageData);
-            this.currentPage.set(componentType, page);
-            this.totalPages.set(componentType, totalPages);
-       
-            return pageData;
-            
-        } catch (error) {
-            return this.getEmptyPageData();
+            _page_cache.set(key, result);
+            _current.set(type, page);
+            _total.set(type, total_pages);
+
+            return result;
+        } catch (e) {
+            return _empty_page();
         }
-    }
+    };
 
-    async getAllComponents(componentType) {
-        if (this.allComponentsCache.has(componentType)) {
-            const cached = this.allComponentsCache.get(componentType);
-            return cached;
-        }
+    const _apply_filters = (components, filters) => {
+        if (!filters || !Object.keys(filters).length) return components;
 
-        try {
-            const response = await fetch('./data/basic_components.json');
-            
-            if (!response.ok) {
-                throw new Error(`ошибка http: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            const components = data.components?.[componentType] || [];;
-    
-            this.allComponentsCache.set(componentType, components);
-            
-            return components;
-            
-        } catch (error) {
-            throw new Error(`проблемы с компонентами`, error);
-        }
-    }
+        return components.filter(c => {
+            let ok = true;
+            const ignore = ['cooler', 'storage', 'psu', 'case'];
 
-
-    applyFilters(components, filters) {
-        if (!filters || Object.keys(filters).length === 0) {
-            return components;
-        }
-
-        
-        return components.filter(component => {
-            let passesFilters = true;
-
-            const ignoreFiltersFor = ['cooler', 'storage', 'psu', 'case'];
-            
-            if (ignoreFiltersFor.includes(component.category)) {
-                if (filters.searchQuery && component.name) {
-                    const query = filters.searchQuery.toLowerCase();
-                    passesFilters = passesFilters && component.name.toLowerCase().includes(query);
+            if (ignore.includes(c.category)) {
+                if (filters.searchQuery && c.name) {
+                    ok = c.name.toLowerCase().includes(filters.searchQuery.toLowerCase());
                 }
-                return passesFilters;
+                return ok;
             }
 
-            if (filters.socket && component.socket && (component.category === 'cpu' || component.category === 'motherboard')) {
-                passesFilters = passesFilters && (component.socket === filters.socket);
+            if (filters.socket && c.socket && (c.category === 'cpu' || c.category === 'motherboard')) {
+                ok = c.socket === filters.socket;
             }
-            
+
             if (filters.memoryType) {
-                if (component.memoryType && component.category === 'motherboard') {
-                    passesFilters = passesFilters && (component.memoryType === filters.memoryType);
-                }
-                if (component.type && component.category === 'ram') {
-                    passesFilters = passesFilters && (component.type === filters.memoryType);
-                }
+                if (c.memoryType && c.category === 'motherboard') ok = c.memoryType === filters.memoryType;
+                if (c.type && c.category === 'ram') ok = c.type === filters.memoryType;
             }
 
-            if (filters.searchQuery && component.name) {
-                const query = filters.searchQuery.toLowerCase();
-                passesFilters = passesFilters && component.name.toLowerCase().includes(query);
+            if (filters.searchQuery && c.name) {
+                ok = ok && c.name.toLowerCase().includes(filters.searchQuery.toLowerCase());
             }
-            return passesFilters;
-            });
-    }
 
-    async searchComponents(componentType, query, filters = {}) {
-        
-        const searchFilters = {
-            ...filters,
-            searchQuery: query
-        };
-        
-        this.clearPageCacheForType(componentType);
-        
-        return await this.loadComponentPage(componentType, 1, searchFilters);
-    }
+            return ok;
+        });
+    };
 
-    getCacheKey(componentType, page, filters) {
-        return `${componentType}_page_${page}_${JSON.stringify(filters)}`;
-    }
+    const searchComponents = async (type, query, filters = {}) => {
+        const search_filters = { ...filters, searchQuery: query };
+        _clear_type_cache(type);
+        return await loadComponentPage(type, 1, search_filters);
+    };
 
-    clearPageCacheForType(componentType) {
-        for (const key of this.pageCache.keys()) {
-            if (key.startsWith(componentType)) {
-                this.pageCache.delete(key);
-            }
+    const _cache_key = (type, page, filters) => {
+        return `${type}_page_${page}_${JSON.stringify(filters)}`;
+    };
+
+    const _clear_type_cache = (type) => {
+        for (const key of _page_cache.keys()) {
+            if (key.startsWith(type)) _page_cache.delete(key);
         }
-    }
+    };
 
-    clearAllCache() {
-        this.pageCache.clear();
-        this.allComponentsCache.clear();
-    }
+    const clearAllCache = () => {
+        _page_cache.clear();
+        _all_cache.clear();
+    };
 
-    getEmptyPageData() {
-        return {
-            components: [],
-            currentPage: 1,
-            totalPages: 0,
-            totalItems: 0,
-            hasNext: false,
-            hasPrev: false,
-            itemsPerPage: this.itemsPerPage
-        };
-    }
+    const _empty_page = () => ({
+        components: [],
+        currentPage: 1,
+        totalPages: 0,
+        totalItems: 0,
+        hasNext: false,
+        hasPrev: false,
+        itemsPerPage: _per_page
+    });
 
-    getCurrentPage(componentType) {
-        return this.currentPage.get(componentType) || 1;
-    }
+    const getCurrentPage = (type) => _current.get(type) || 1;
+    const getTotalPages = (type) => _total.get(type) || 1;
 
-    getTotalPages(componentType) {
-        return this.totalPages.get(componentType) || 1;
-    }
-}
+    return Object.freeze({
+        loadComponentPage,
+        searchComponents,
+        clearAllCache,
+        getCurrentPage,
+        getTotalPages
+    });
+})();
 
-
+window.PaginationManager = PaginationManager;

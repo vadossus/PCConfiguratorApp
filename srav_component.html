@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC Configurator</title>
+    
+    <link rel="stylesheet" href="css/components/srav.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components/header.css">
+</head>
+<body>
+    <header class="main-header">
+        <nav class="navbar">
+            <div class="nav-brand">
+                <div class="logo-icon">
+                    <img src="source/site_items/site_icon.png" alt="PC Configurator">
+                </div>
+                <h1>PC Configurator</h1>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="index.html">Конфигуратор</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="srav-page">
+        <div class="srav-header">
+            <h1 class="srav-title">Сравнение сборок</h1>
+            
+            <div class="srav-controls">
+                <div class="select-row">
+                    <div class="select-group">
+                        <label>Сборка 1</label>
+                        <select id="build_1" class="srav-select">
+                            <option value="">Загрузка...</option>
+                        </select>
+                    </div>
+                    <div class="select-group">
+                        <label>Сборка 2</label>
+                        <select id="build_2" class="srav-select">
+                            <option value="">Загрузка...</option>
+                        </select>
+                    </div>
+                    <label class="diff-toggle">
+                        <input type="checkbox" id="show_only_diff">
+                        <span>Только различия</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div id="srav_result">
+            <div class="empty-msg">Выберите две сборки для сравнения</div>
+        </div>
+    </div>
+
+    <script src="js/srav.js"></script>
+</body>
+</html>

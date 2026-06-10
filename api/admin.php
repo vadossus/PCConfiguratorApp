@@ -1,869 +1,640 @@
 <?php
-ob_start();
-session_start();
-header('Content-Type: application/json');
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST, GET, PUT, DELETE");
-header("Access-Control-Allow-Headers: Content-Type");
+declare(strict_types=1);
 
-include_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/classes/Component.php';
 
-$database = new Database();
-$db = $database->getConnection();
+header('Content-Type: application/json; charset=utf-8');
+set_cors_headers();
+require_admin();
 
-$action = $_GET['action'] ?? '';
-$input = json_decode(file_get_contents('php://input'), true);
-switch($action) {
+$db = (new Database())->connect();
+$action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_SPECIAL_CHARS) ?? '';
+$input = get_json_input();
+
+switch ($action) {
     case 'get_count':
-        getCount($db);
+        handle_get_count($db);
         break;
+
     case 'get_components':
-        getComponents($db);
+        handle_get_components($db);
         break;
+
     case 'get_users':
-        getUsers($db);
+        handle_get_users($db);
         break;
+
     case 'get_builds':
-        getBuilds($db);
-        break;
+        header('Location: builds.php?action=get_builds');
+        exit;
+
     case 'add_component':
-        addComponent($db, $input);
+        handle_add_component($db, $input);
         break;
-    case 'update_user_role':
-        updateUserRole($db, $input);
-        break;
-    case 'delete_component':
-        deleteComponent($db, $input);
-        break;
-    case 'delete_user':
-        deleteUser($db, $input);
-        break;
-    case 'toggle_component':
-        toggleComponent($db, $input);
-        break;
+
     case 'update_component':
-        updateComponent($db, $input);
+        handle_update_component($db, $input);
         break;
+
+    case 'delete_component':
+        handle_delete_component($db, $input);
+        break;
+
+    case 'toggle_component':
+        handle_toggle_component($db, $input);
+        break;
+
     case 'get_component':
-        getComponent($db);
+        handle_get_component($db);
         break;
+
+    case 'update_user_role':
+        handle_update_user_role($db, $input);
+        break;
+
+    case 'delete_user':
+        handle_delete_user($db, $input);
+        break;
+
     case 'delete_build':
-        deleteBuild($db, $input);
+        handle_delete_build($db, $input);
         break;
+
     case 'log_activity':
-        logActivity($db, $input);
+        handle_log_activity($db, $input);
         break;
+
     case 'get_activities':
-        getActivities($db);
+        handle_get_activities($db);
         break;
+
     case 'check_component_activity':
-        $componentId = $_GET['id'] ?? 0;      
-        if (!$componentId) {
-            echo json_encode(['success' => false, 'message' => 'Не указан ID']);
-            exit;
-        }
-        try {
-            $stmt = $db->prepare("SELECT is_active FROM components WHERE id = ?");
-            $stmt->execute([$componentId]);
-            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        handle_check_component_activity($db);
+        break;
 
-            if ($result) {
-                echo json_encode([
-                    'success' => true, 
-                    'is_active' => (int)$result['is_active'] === 1
-                ]);
-            } else {
-                echo json_encode(['success' => false, 'is_active' => false, 'message' => 'Компонент не найден']);
-            }
-        } catch (PDOException $e) {
-            echo json_encode(['success' => false, 'message' => 'ошибка БД']);
-        }
-        break;
-    case 'get_my_builds':
-        getUserBuildsOnly($db);
-        break;
     default:
-        echo json_encode(['success' => false, 'message' => 'неизвестное действие: ' . $action]);
+        send_response(false, 'Неизвестное действие: ' . $action, 400);
 }
 
-function getCount($pdo) {
-    $table = $_GET['table'] ?? '';
-    $allowed_tables = ['users', 'components', 'user_builds'];
-    
-    if (!in_array($table, $allowed_tables)) {
-        echo json_encode(['success' => false, 'message' => 'Недопустимая таблица']);
-        return;
+function handle_get_count(PDO $db): void
+{
+    $table = filter_input(INPUT_GET, 'table', FILTER_SANITIZE_SPECIAL_CHARS) ?? '';
+    $allowed = ['users', 'components', 'user_builds'];
+
+    if (!in_array($table, $allowed, true)) {
+        send_response(false, 'Недопустимая таблица', 400);
     }
-    
+
+    $stmt = $db->query("SELECT COUNT(*) FROM {$table}");
+    $count = (int) $stmt->fetchColumn();
+
+    send_response(true, '', 200, ['count' => $count]);
+}
+
+function handle_get_components(PDO $db): void
+{
+    $has_categories = $db->query("SHOW TABLES LIKE 'component_categories'")->rowCount() > 0;
+    $has_category_column = $db->query("SHOW COLUMNS FROM components LIKE 'category_id'")->rowCount() > 0;
+
+    if ($has_category_column && $has_categories) {
+        $query = "SELECT c.id, c.category_id, c.reference_id, c.reference_table,
+                         c.is_active, c.created_at, c.updated_at,
+                         cat.code AS category_code, cat.name AS category_name
+                  FROM components c
+                  LEFT JOIN component_categories cat ON c.category_id = cat.id
+                  ORDER BY c.created_at DESC";
+    } else {
+        $query = 'SELECT * FROM components ORDER BY created_at DESC';
+    }
+
+    $stmt = $db->query($query);
+    $components = $stmt->fetchAll();
+
+    foreach ($components as &$comp) {
+        foreach (['critical_specs', 'compatibility_flags', 'specs'] as $field) {
+            $comp[$field] = normalize_json_field($comp[$field] ?? null);
+        }
+        foreach (['socket', 'memory_type', 'form_factor', 'efficiency', 'type'] as $field) {
+            if (isset($comp[$field]) && $comp[$field] === null) {
+                $comp[$field] = '';
+            }
+        }
+    }
+
+    send_response(true, '', 200, ['components' => $components]);
+}
+
+function handle_get_users(PDO $db): void
+{
+    $has_builds = $db->query("SHOW TABLES LIKE 'user_builds'")->rowCount() > 0;
+
+    if ($has_builds) {
+        $query = "SELECT u.*, COUNT(ub.id) AS builds_count
+                  FROM users u
+                  LEFT JOIN user_builds ub ON ub.user_id = u.id
+                  GROUP BY u.id
+                  ORDER BY u.created_at DESC";
+    } else {
+        $query = 'SELECT *, 0 AS builds_count FROM users ORDER BY created_at DESC';
+    }
+
+    $users = $db->query($query)->fetchAll();
+
+    foreach ($users as &$user) {
+        if (isset($user['created_at'])) {
+            $user['created_at'] = date('Y-m-d H:i:s', strtotime($user['created_at']));
+        }
+    }
+
+    send_response(true, '', 200, ['users' => $users]);
+}
+
+function handle_add_component(PDO $db, array $input): void
+{
+    if (empty($input['category_code']) || empty($input['name']) || !isset($input['price'])) {
+        send_response(false, 'Не все обязательные поля заполнены', 400);
+    }
+
+    $table_map = [
+        'cpus' => 'cpus', 'motherboards' => 'motherboards', 'rams' => 'rams',
+        'gpus' => 'gpus', 'storages' => 'storages', 'psus' => 'psus',
+        'cases' => 'cases', 'coolers' => 'coolers',
+    ];
+
+    $target_table = $table_map[$input['category_code']] ?? null;
+    if (!$target_table) {
+        send_response(false, 'Неверная категория', 400);
+    }
+
     try {
-        $stmt = $pdo->query("SELECT COUNT(*) as count FROM $table");
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
-        echo json_encode(['success' => true, 'count' => (int)$result['count']]);
-    } catch(Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Ошибка запроса: ' . $e->getMessage(), 'count' => 0]);
-    }
-}
+        $db->beginTransaction();
+        $db->exec('SET FOREIGN_KEY_CHECKS = 0');
 
-function getComponents($pdo) {
-     try {
-        $stmt = $pdo->query("SHOW TABLES LIKE 'components'");
-        if ($stmt->rowCount() === 0) {
-            echo json_encode(['success' => true, 'components' => [], 'message' => 'Таблица components не существует']);
-            return;
-        }
-        
-        $stmt = $pdo->query("SHOW COLUMNS FROM components LIKE 'category_id'");
-        if ($stmt->rowCount() > 0) {
-            $query = "SELECT c.*, cat.slug as category_slug, cat.name as category_name 
-                     FROM components c 
-                     LEFT JOIN component_categories cat ON c.category_id = cat.id 
-                     ORDER BY c.created_at DESC";
-        } else {
-            $query = "SELECT *, '' as category_slug, '' as category_name FROM components ORDER BY created_at DESC";
-        }
-        
-        $stmt = $pdo->query($query);
-        $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        foreach($components as &$component) {
-            if (isset($component['critical_specs'])) {
-                if (empty($component['critical_specs'])) {
-                    $component['critical_specs'] = [];
-                } else {
-                    $decoded = json_decode($component['critical_specs'], true);
-                    $component['critical_specs'] = ($decoded === null || json_last_error() !== JSON_ERROR_NONE) 
-                        ? [] 
-                        : $decoded;
-                }
-            } else {
-                $component['critical_specs'] = [];
-            }
-            
-            if (isset($component['compatibility_flags'])) {
-                if (empty($component['compatibility_flags'])) {
-                    $component['compatibility_flags'] = [];
-                } else {
-                    $decoded = json_decode($component['compatibility_flags'], true);
-                    $component['compatibility_flags'] = ($decoded === null || json_last_error() !== JSON_ERROR_NONE) 
-                        ? [] 
-                        : $decoded;
-                }
-            } else {
-                $component['compatibility_flags'] = [];
-            }
-            
-            if (isset($component['specs'])) {
-                if (empty($component['specs'])) {
-                    $component['specs'] = [];
-                } else {
-                    $decoded = json_decode($component['specs'], true);
-                    $component['specs'] = ($decoded === null || json_last_error() !== JSON_ERROR_NONE) 
-                        ? [] 
-                        : $decoded;
-                }
-            } else {
-                $component['specs'] = [];
-            }
-            
-            foreach(['socket', 'memory_type', 'form_factor', 'efficiency', 'type'] as $field) {
-                if (isset($component[$field]) && $component[$field] === null) {
-                    $component[$field] = '';
-                }
-            }
-        }
-        
-        echo json_encode(['success' => true, 'components' => $components]);
-    } catch(Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Ошибка загрузки компонентов: ' . $e->getMessage(), 'components' => []]);
-    }
-}
-
-function getUsers($pdo) {
-    try {
-        $stmt = $pdo->query("SHOW TABLES LIKE 'user_builds'");
-        if ($stmt->rowCount() === 0) {
-            $stmt = $pdo->query("SELECT *, 0 as builds_count FROM users ORDER BY created_at DESC");
-        } else {
-            $stmt = $pdo->query("
-                SELECT u.*, 
-                       (SELECT COUNT(*) FROM user_builds ub WHERE ub.user_id = u.id) as builds_count 
-                FROM users u 
-                ORDER BY u.created_at DESC
-            ");
-        }
-        
-        $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        foreach($users as &$user) {
-            if (isset($user['created_at'])) {
-                $user['created_at'] = date('Y-m-d H:i:s', strtotime($user['created_at']));
-            }
-        }
-        
-        echo json_encode(['success' => true, 'users' => $users]);
-    } catch(Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Ошибка загрузки пользователей: ' . $e->getMessage(), 'users' => []]);
-    }
-}
-
-
-function getBuilds($pdo) {
-    try {
-        $stmt = $pdo->query("SHOW TABLES LIKE 'user_builds'");
-        if ($stmt->rowCount() === 0) {
-            echo json_encode(['success' => true, 'builds' => []]);
-            return;
-        }
-        
-        $currentUserId = (int)$_SESSION['user_id'];
-        $currentUserRole = $_SESSION['role'] ?? 'user';
-
-        if ($currentUserRole === 'admin') {
-            $query = "SELECT ub.*, u.username 
-                     FROM user_builds ub 
-                     LEFT JOIN users u ON ub.user_id = u.id 
-                     ORDER BY ub.created_at DESC";
-            $params = [];
-        } else {
-            $query = "SELECT ub.*, u.username 
-                     FROM user_builds ub 
-                     LEFT JOIN users u ON ub.user_id = u.id 
-                     WHERE ub.user_id = ? 
-                     ORDER BY ub.created_at DESC";
-            $params = [$currentUserId];
-        }
-
-        $stmt = $pdo->prepare($query);
-        $stmt->execute($params);
-        $builds = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        foreach($builds as &$build) {
-            $raw_data = $build['compatibility_data'] ?? '';
-            if (!empty($raw_data)) {
-                $decoded = json_decode($raw_data, true);
-                $components = $decoded['components'] ?? $decoded ?? [];
-                
-                if (!empty($components)) {
-                    $fullComponents = [];
-                    foreach ($components as $type => $componentData) {
-                        if ($type === 'storages' && is_array($componentData) && !empty($componentData)) {
-                            $fullComponents[$type] = [];
-                            foreach ($componentData as $storage) {
-                                if (isset($storage['id'])) {
-                                    $comp = getComponentById($pdo, $storage['id']);
-                                    if ($comp) {
-                                        $fullComponents[$type][] = $comp;
-                                    }
-                                }
-                            }
-                        } elseif (!empty($componentData) && isset($componentData['id'])) {
-                            $comp = getComponentById($pdo, $componentData['id']);
-                            if ($comp) {
-                                $fullComponents[$type] = $comp;
-                            }
-                        }
-                    }
-                    $build['components'] = $fullComponents;
-                } else {
-                    $build['components'] = [];
-                }
-            } else {
-                $build['components'] = [];
-            }
-        }
-        
-        echo json_encode(['success' => true, 'builds' => $builds]);
-    } catch(Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Ошибка загрузки сборок: ' . $e->getMessage(), 'builds' => []]);
-    }
-}
-
-function getComponentById($pdo, $id) {
-    try {
-        $stmt = $pdo->prepare("
-            SELECT c.*, cat.slug as category_slug, cat.name as category_name 
-            FROM components c 
-            LEFT JOIN component_categories cat ON c.category_id = cat.id 
-            WHERE c.id = ?
-        ");
-        $stmt->execute([$id]);
-        $component = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($component) {
-            $component = processComponentJSON($component);
-        }
-        
-        return $component;
-    } catch(Exception $e) {
-        return null;
-    }
-}
-
-function deleteBuild($pdo, $data) {
-    if (empty($data['id'])) {
-        echo json_encode(['success' => false, 'message' => 'ID не указан']);
-        return;
-    }
-    
-    try {
-        $stmt = $pdo->prepare("DELETE FROM user_builds WHERE id = ?");
-        $stmt->execute([$data['id']]);
-        
-        if ($stmt->rowCount() > 0) {
-            echo json_encode(['success' => true, 'message' => 'Сборка удалена']);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Сборка не найдена']);
-        }
-    } catch(Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Ошибка удаления: ' . $e->getMessage()]);
-    }
-}
-
-function addComponent($pdo, $data) {
-    if (empty($data['category_slug']) || empty($data['name']) || !isset($data['price'])) {
-        echo json_encode(['success' => false, 'message' => 'Не все обязательные поля заполнены']);
-        return;
-    }
-    
-    try {
-        $stmt = $pdo->query("SHOW COLUMNS FROM components");
-        $columns = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        
-        $category_id = 1; 
-        
-        if (in_array('category_id', $columns)) {
-            $stmt = $pdo->prepare("SELECT id FROM component_categories WHERE slug = ?");
-            $stmt->execute([$data['category_slug']]);
-            $category = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($category) {
-                $category_id = $category['id'];
-            } else {
-                $categoryMapping = [
-                    'cpus' => 1,
-                    'motherboards' => 2,
-                    'rams' => 3,
-                    'gpus' => 4,
-                    'storages' => 5,
-                    'psus' => 6,
-                    'cases' => 7,
-                    'coolers' => 8
-                ];
-                
-                if (isset($categoryMapping[$data['category_slug']])) {
-                    $category_id = $categoryMapping[$data['category_slug']];
-                }
-            }
-        }
-        
-        $componentData = [
-            'name' => $data['name'],
-            'price' => (float)$data['price'],
-            'image' => $data['image'] ?? '',
+        $insert_data = [
+            'name' => $input['name'],
+            'description' => $input['description'] ?? '',
+            'price' => (float) $input['price'],
+            'image' => $input['image'] ?? '',
             'is_active' => 1,
-            'created_at' => date('Y-m-d H:i:s')
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
         ];
-        
-        if (in_array('category_id', $columns)) {
-            $componentData['category_id'] = $category_id;
-        }
-        
-        $basicFields = [
-            'description', 'socket', 'memory_type', 'form_factor', 
-            'wattage', 'efficiency', 'capacity', 'speed', 'tdp', 'type'
+
+        $spec_fields = [
+            'socket', 'cores', 'threads', 'frequency', 'tdp', 'memory_type', 'manufacturer',
+            'chipset', 'form_factor', 'memory_slots', 'max_memory', 'm2_slots', 'sata_ports',
+            'pcie_version', 'wifi', 'type', 'capacity', 'modules', 'speed', 'cas_latency', 'rgb',
+            'gpu_chip', 'memory_size', 'recommended_psu', 'hdmi_ports', 'displayport_ports',
+            'length', 'chip_manufacturer', 'interface', 'read_speed', 'write_speed', 'wattage',
+            'efficiency', 'modular', 'pcie_connectors', 'sata_connectors', 'radiator_size',
+            'fan_size', 'noise_level', 'height', 'led', 'socket_compatibility',
+            'supported_motherboards', 'color', 'window', 'max_gpu_length',
+            'max_cpu_cooler_height', 'drive_bays', 'fan_slots', 'radiator_support',
         ];
-        
-        foreach($basicFields as $field) {
-            if (in_array($field, $columns) && isset($data[$field]) && $data[$field] !== null && $data[$field] !== '') {
-                $componentData[$field] = $data[$field];
+
+        foreach ($spec_fields as $field) {
+            if (isset($input[$field]) && $input[$field] !== '') {
+                $insert_data[$field] = $input[$field];
             }
         }
-        
-        if (in_array('critical_specs', $columns) && isset($data['critical_specs'])) {
-            if (is_array($data['critical_specs'])) {
-                $componentData['critical_specs'] = json_encode($data['critical_specs'], JSON_UNESCAPED_UNICODE);
-            } elseif (is_string($data['critical_specs']) && !empty($data['critical_specs'])) {
-                $componentData['critical_specs'] = $data['critical_specs'];
-            } else {
-                $componentData['critical_specs'] = json_encode([]);
-            }
-        }
-        
-        if (in_array('compatibility_flags', $columns) && isset($data['compatibility_flags'])) {
-            if (is_array($data['compatibility_flags'])) {
-                $componentData['compatibility_flags'] = json_encode($data['compatibility_flags'], JSON_UNESCAPED_UNICODE);
-            } elseif (is_string($data['compatibility_flags']) && !empty($data['compatibility_flags'])) {
-                $componentData['compatibility_flags'] = $data['compatibility_flags'];
-            } else {
-                $componentData['compatibility_flags'] = json_encode([]);
-            }
-        }
-        
-        if (in_array('specs', $columns)) {
-            $componentData['specs'] = json_encode([]);
-        }
-        
-        $fields = implode(', ', array_keys($componentData));
-        $placeholders = ':' . implode(', :', array_keys($componentData));
-        
-        $stmt = $pdo->prepare("INSERT INTO components ($fields) VALUES ($placeholders)");
-        
-        foreach($componentData as $key => $value) {
-            if ($value === null) {
-                $stmt->bindValue(":$key", null, PDO::PARAM_NULL);
-            } else {
-                $stmt->bindValue(":$key", $value);
-            }
-        }
-        
-        $stmt->execute();
-        
-        echo json_encode([
-            'success' => true, 
-            'message' => 'Компонент успешно добавлен', 
-            'id' => $pdo->lastInsertId()
+
+        $fields = implode(', ', array_keys($insert_data));
+        $placeholders = ':' . implode(', :', array_keys($insert_data));
+
+        $stmt = $db->prepare("INSERT INTO {$target_table} ({$fields}) VALUES ({$placeholders})");
+        $stmt->execute($insert_data);
+        $reference_id = (int) $db->lastInsertId();
+
+        $cat_stmt = $db->prepare('SELECT id FROM component_categories WHERE code = :code LIMIT 1');
+        $cat_stmt->execute([':code' => $input['category_code']]);
+        $category_id = (int) $cat_stmt->fetchColumn();
+
+        $link_stmt = $db->prepare(
+            'INSERT INTO components (category_id, reference_id, reference_table, is_active, created_at, updated_at)
+             VALUES (:cat_id, :ref_id, :ref_table, 1, :created, :updated)'
+        );
+        $link_stmt->execute([
+            ':cat_id' => $category_id,
+            ':ref_id' => $reference_id,
+            ':ref_table' => $target_table,
+            ':created' => date('Y-m-d H:i:s'),
+            ':updated' => date('Y-m-d H:i:s'),
         ]);
-        
-    } catch(Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Ошибка добавления компонента: ' . $e->getMessage()]);
+
+        $component_id = (int) $db->lastInsertId();
+        $db->exec('SET FOREIGN_KEY_CHECKS = 1');
+        $db->commit();
+
+        send_response(true, 'Компонент добавлен', 201, ['id' => $component_id]);
+    } catch (Throwable $e) {
+        $db->exec('SET FOREIGN_KEY_CHECKS = 1');
+        $db->rollBack();
+        send_response(false, 'Ошибка добавления компонента', 500);
     }
 }
 
-function updateUserRole($pdo, $data) {
-    if (empty($data['user_id']) || empty($data['role'])) {
-        echo json_encode(['success' => false, 'message' => 'Не все данные предоставлены']);
-        return;
+function handle_update_component(PDO $db, array $input): void
+{
+    $id = (int) ($input['id'] ?? 0);
+    if (!$id) {
+        send_response(false, 'ID не указан', 400);
     }
-    
-    try {
-        $stmt = $pdo->prepare("UPDATE users SET role = ? WHERE id = ?");
-        $stmt->execute([$data['role'], $data['user_id']]);
-        
-        echo json_encode(['success' => true, 'message' => 'Роль пользователя обновлена']);
-    } catch(Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Ошибка обновления роли: ' . $e->getMessage()]);
-    }
-}
 
-function deleteComponent($pdo, $data) {
-    if (empty($data['id'])) {
-        echo json_encode(['success' => false, 'message' => 'ID не указан']);
-        return;
+    $stmt = $db->prepare(
+        "SELECT c.*, cat.code AS category_code
+         FROM components c
+         INNER JOIN component_categories cat ON c.category_id = cat.id
+         WHERE c.id = :id LIMIT 1"
+    );
+    $stmt->execute([':id' => $id]);
+    $comp = $stmt->fetch();
+
+    if (!$comp) {
+        send_response(false, 'Компонент не найден', 404);
     }
+
+    $target_table = $comp['reference_table'];
+    $reference_id = $comp['reference_id'];
+
+    $reserved_words = ['window', 'order', 'group', 'key', 'index', 'type', 'value'];
     
-    try {
-        $stmt = $pdo->prepare("DELETE FROM components WHERE id = ?");
-        $stmt->execute([$data['id']]);
-        
-        if ($stmt->rowCount() > 0) {
-            echo json_encode(['success' => true, 'message' => 'Компонент полностью удален из базы']);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Компонент не найден']);
+    $allowed_fields = [
+        'name', 'description', 'price', 'image', 'socket', 'cores', 'threads',
+        'frequency', 'tdp', 'memory_type', 'chipset', 'form_factor', 'memory_slots',
+        'max_memory', 'm2_slots', 'sata_ports', 'pcie_version', 'wifi', 'type',
+        'capacity', 'speed', 'modules', 'rgb', 'gpu_chip', 'memory_size',
+        'recommended_psu', 'hdmi_ports', 'displayport_ports', 'length',
+        'chip_manufacturer', 'interface', 'read_speed', 'write_speed', 'wattage',
+        'efficiency', 'modular', 'pcie_connectors', 'sata_connectors',
+        'radiator_size', 'fan_size', 'noise_level', 'height', 'led',
+        'socket_compatibility', 'supported_motherboards', 'color', 'window',
+        'max_gpu_length', 'max_cpu_cooler_height', 'drive_bays', 'fan_slots',
+        'radiator_support', 'is_active',
+    ];
+
+    $update_data = [];
+    foreach ($allowed_fields as $field) {
+        if (array_key_exists($field, $input)) {
+            $update_data[$field] = $input[$field];
         }
-    } catch(Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Ошибка: ' . $e->getMessage()]);
     }
-}
 
-function deleteUser($pdo, $data) {
-    if (empty($data['id'])) {
-        echo json_encode(['success' => false, 'message' => 'ID не указан']);
-        return;
-    }
-    
-    try {
-        $stmt = $pdo->prepare("DELETE FROM users WHERE id = ? AND role != 'admin'");
-        $stmt->execute([$data['id']]);
-        
-        if ($stmt->rowCount() > 0) {
-            echo json_encode(['success' => true, 'message' => 'Пользователь удален']);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Нельзя удалить администратора или пользователь не найден']);
-        }
-    } catch(Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Ошибка удаления пользователя: ' . $e->getMessage()]);
-    }
-}
+    $update_data['updated_at'] = date('Y-m-d H:i:s');
 
-function toggleComponent($pdo, $data) {
-    if (empty($data['id']) || !isset($data['is_active'])) {
-        echo json_encode(['success' => false, 'message' => 'Не все данные предоставлены']);
-        return;
-    }
-    
-    try {
-        $stmt = $pdo->prepare("UPDATE components SET is_active = ? WHERE id = ?");
-        $stmt->execute([$data['is_active'] ? 1 : 0, $data['id']]);
-        
-        echo json_encode(['success' => true, 'message' => 'Статус компонента изменен']);
-    } catch(Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Ошибка изменения статуса: ' . $e->getMessage()]);
-    }
-}
-
-function getComponent($pdo) {
-    try {
-        $category = $_GET['category'] ?? null;
-        $search = $_GET['search'] ?? null;
-        $isActive = $_GET['is_active'] ?? null; 
-        $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-        $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
-        $offset = ($page - 1) * $limit;
-        
-        $where = " WHERE 1=1";
+    if (!empty($update_data)) {
+        $set_parts = [];
         $params = [];
-        $types = [];
 
-        if ($category && $category !== 'all') {
-            $where .= " AND cat.slug = ?";
-            $params[] = $category;
-            $types[] = 's';
-        }
-        
-        if ($search) {
-            $where .= " AND (c.name LIKE ? OR c.description LIKE ?)";
-            $params[] = "%$search%";
-            $params[] = "%$search%";
-            $types[] = 's';
-            $types[] = 's';
-        }
-
-        if ($isActive !== null && $isActive !== '') {
-            $where .= " AND c.is_active = ?";
-            $params[] = (int)$isActive;
-            $types[] = 'i';
-        }
-
-        $countQuery = "SELECT COUNT(*) as total FROM components c 
-                      LEFT JOIN component_categories cat ON c.category_id = cat.id" . $where;
-        $countStmt = $pdo->prepare($countQuery);
-        foreach($params as $i => $param) {
-            $countStmt->bindValue($i + 1, $param);
-        }
-        $countStmt->execute();
-        $total = (int)($countStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
-
-
-        $sortBy = $_GET['sort'] ?? 'c.created_at';
-        $sortOrder = $_GET['order'] ?? 'desc';
-        
-  
-        $allowedSort = ['id', 'name', 'price', 'c.created_at', 'is_active'];
-        if (!in_array($sortBy, $allowedSort)) $sortBy = 'c.created_at';
-        if (!in_array(strtolower($sortOrder), ['asc', 'desc'])) $sortOrder = 'desc';
-
-        $query = "SELECT c.*, cat.slug as category_slug, cat.name as category_name 
-                  FROM components c 
-                  LEFT JOIN component_categories cat ON c.category_id = cat.id 
-                  $where 
-                  ORDER BY $sortBy $sortOrder 
-                  LIMIT ? OFFSET ?";
-        
-
-        $finalParams = $params;
-        $finalParams[] = $limit;
-        $finalParams[] = $offset;
-        
-        $finalTypes = $types;
-        $finalTypes[] = 'i';
-        $finalTypes[] = 'i';
-
-        $stmt = $pdo->prepare($query);
-        foreach($finalParams as $i => $param) {
-            $type = $finalTypes[$i] ?? 's';
-            $stmt->bindValue($i + 1, $param, $type === 'i' ? PDO::PARAM_INT : PDO::PARAM_STR);
-        }
-        
-        $stmt->execute();
-        $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        foreach($components as &$component) {
-            $component = processComponentJSON($component);
-        }
-        
-        echo json_encode([
-            'success' => true, 
-            'components' => $components,
-            'pagination' => [
-                'total' => $total,
-                'page' => $page,
-                'limit' => $limit,
-                'pages' => ceil($total / $limit)
-            ]
-        ]);
-        
-    } catch(Exception $e) {
-        echo json_encode([
-            'success' => false, 
-            'message' => 'Ошибка: ' . $e->getMessage(),
-            'components' => []
-        ]);
-    }
-}
-
-function updateComponent($pdo, $data) {
-    if (empty($data['id'])) {
-        echo json_encode(['success' => false, 'message' => 'ID не указан']);
-        return;
-    }
-    
-    try {
-        $stmt = $pdo->prepare("SELECT id FROM components WHERE id = ?");
-        $stmt->execute([$data['id']]);
-        
-        if ($stmt->rowCount() === 0) {
-            echo json_encode(['success' => false, 'message' => 'Компонент не найден']);
-            return;
-        }
-        
-        $updateData = [];
-        $allowedFields = [
-            'name', 'description', 'price', 'image', 'socket', 'memory_type',
-            'form_factor', 'wattage', 'efficiency', 'capacity', 'speed', 'tdp', 'type',
-            'specs', 'compatibility_flags', 'critical_specs', 'is_active'
-        ];
-        
-        foreach($allowedFields as $field) {
-            if (isset($data[$field])) {
-                if (in_array($field, ['critical_specs', 'compatibility_flags', 'specs'])) {
-                    if (is_array($data[$field])) {
-                        $updateData[$field] = json_encode($data[$field], JSON_UNESCAPED_UNICODE);
-                    } else {
-                        $updateData[$field] = $data[$field];
-                    }
-                } else {
-                    $updateData[$field] = $data[$field];
-                }
-            }
-        }
-        
-        $updateData['updated_at'] = date('Y-m-d H:i:s');
-
-        $setParts = [];
-        $params = [];
-        
-        foreach($updateData as $field => $value) {
-            $setParts[] = "$field = ?";
+        foreach ($update_data as $field => $value) {
+            $escaped_field = in_array($field, $reserved_words) ? "`{$field}`" : $field;
+            $set_parts[] = "{$escaped_field} = ?";
             $params[] = $value;
         }
-        
-        $params[] = $data['id']; 
-        
-        $query = "UPDATE components SET " . implode(', ', $setParts) . " WHERE id = ?";
-        
-        $stmt = $pdo->prepare($query);
-        $stmt->execute($params);
-        
-        echo json_encode([
-            'success' => true, 
-            'message' => 'Компонент успешно обновлен',
-            'updated_at' => $updateData['updated_at']
-        ]);
-        
-    } catch(Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Ошибка обновления компонента: ' . $e->getMessage()]);
+
+        $params[] = $reference_id;
+        $query = "UPDATE {$target_table} SET " . implode(', ', $set_parts) . ' WHERE id = ?';
+        $db->prepare($query)->execute($params);
     }
+
+    if (isset($input['is_active'])) {
+        $db->prepare('UPDATE components SET is_active = ?, updated_at = ? WHERE id = ?')
+           ->execute([(int) $input['is_active'], date('Y-m-d H:i:s'), $id]);
+    }
+
+    send_response(true, 'Компонент обновлён', 200);
 }
 
+function handle_delete_component(PDO $db, array $input): void
+{
+    $id = (int) ($input['id'] ?? 0);
+    if (!$id) {
+        send_response(false, 'ID не указан', 400);
+    }
 
-function processComponentJSON($component) {
-    if (isset($component['critical_specs'])) {
-        if (empty($component['critical_specs'])) {
-            $component['critical_specs'] = [];
-        } else {
-            $decoded = json_decode($component['critical_specs'], true);
-            $component['critical_specs'] = ($decoded === null || json_last_error() !== JSON_ERROR_NONE) 
-                ? [] 
-                : $decoded;
-        }
-    } else {
-        $component['critical_specs'] = [];
+    $stmt = $db->prepare('SELECT reference_table, reference_id FROM components WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $id]);
+    $comp = $stmt->fetch();
+
+    if (!$comp) {
+        send_response(false, 'Компонент не найден', 404);
     }
-    
-    if (isset($component['compatibility_flags'])) {
-        if (empty($component['compatibility_flags'])) {
-            $component['compatibility_flags'] = [];
-        } else {
-            $decoded = json_decode($component['compatibility_flags'], true);
-            $component['compatibility_flags'] = ($decoded === null || json_last_error() !== JSON_ERROR_NONE) 
-                ? [] 
-                : $decoded;
-        }
-    } else {
-        $component['compatibility_flags'] = [];
-    }
-    
-    if (isset($component['specs'])) {
-        if (empty($component['specs'])) {
-            $component['specs'] = [];
-        } else {
-            $decoded = json_decode($component['specs'], true);
-            $component['specs'] = ($decoded === null || json_last_error() !== JSON_ERROR_NONE) 
-                ? [] 
-                : $decoded;
-        }
-    } else {
-        $component['specs'] = [];
-    }
-    
-    foreach(['socket', 'memory_type', 'form_factor', 'efficiency', 'type'] as $field) {
-        if (isset($component[$field]) && $component[$field] === null) {
-            $component[$field] = '';
-        }
-    }
-    
-    return $component;
+
+    $db->prepare("DELETE FROM {$comp['reference_table']} WHERE id = ?")->execute([$comp['reference_id']]);
+    $db->prepare('DELETE FROM components WHERE id = ?')->execute([$id]);
+
+    send_response(true, 'Компонент удалён', 200);
 }
 
-function logActivity($pdo, $data) {
-    try {
-        $stmt = $pdo->query("SHOW TABLES LIKE 'activities'");
-        if ($stmt->rowCount() === 0) {
-            echo json_encode(['success' => true]);
-            return;
-        }
-        
-        $userId = $data['user_id'] ?? 0;
-        $actionType = $data['type'] ?? '';
-        $description = $data['description'] ?? '';
-        
-        $actionNames = [
-            'user_register' => 'Регистрация пользователя',
-            'user_delete' => 'Удаление пользователя',
-            'user_role_change' => 'Изменение роли пользователя',
-            'build_save' => 'Сохранение сборки',
-            'build_delete' => 'Удаление сборки',
-            'component_add' => 'Добавление компонента',
-            'component_edit' => 'Редактирование компонента',
-            'component_delete' => 'Удаление компонента',
-            'component_toggle' => 'Изменение статуса компонента',
-            'import_components' => 'Импорт компонентов'
-        ];
-        
-        $readableType = $data['readable_type'] ?? ($actionNames[$actionType] ?? $actionType);
-        
-        $fullDescription = $readableType . ($description ? ": " . $description : "");
-        
-        $stmt = $pdo->prepare("
-            INSERT INTO activities 
-            (user_id, action_type, description) 
-            VALUES (?, ?, ?)
-        ");
-        
-        $stmt->execute([$userId, $actionType, $fullDescription]);
-        
-        echo json_encode([
-            'success' => true, 
-            'id' => $pdo->lastInsertId(),
-            'message' => 'Активность записана'
-        ]);
-        
-    } catch(Exception $e) {
-        echo json_encode(['success' => true]); 
+function handle_toggle_component(PDO $db, array $input): void
+{
+    $id = (int) ($input['id'] ?? 0);
+    $is_active = (int) ($input['is_active'] ?? 0);
+
+    if (!$id) {
+        send_response(false, 'ID не указан', 400);
     }
+
+    $stmt = $db->prepare('SELECT reference_table, reference_id FROM components WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $id]);
+    $comp = $stmt->fetch();
+
+    if (!$comp) {
+        send_response(false, 'Компонент не найден', 404);
+    }
+
+    $db->prepare("UPDATE {$comp['reference_table']} SET is_active = ? WHERE id = ?")
+       ->execute([$is_active, $comp['reference_id']]);
+
+    $db->prepare('UPDATE components SET is_active = ? WHERE id = ?')
+       ->execute([$is_active, $id]);
+
+    send_response(true, 'Статус изменён', 200);
 }
 
-function getActivities($pdo) {
-    try {
-        $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 15;
-        $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
-        
-        $query = "
-            SELECT a.*, u.username, u.email 
-            FROM activities a
-            LEFT JOIN users u ON a.user_id = u.id
-            ORDER BY a.created_at DESC
-            LIMIT ? OFFSET ?
-        ";
-        
-        $stmt = $pdo->prepare($query);
-        $stmt->bindValue(1, $limit, PDO::PARAM_INT);
-        $stmt->bindValue(2, $offset, PDO::PARAM_INT);
-        $stmt->execute();
-        
-        $activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        foreach($activities as &$activity) {
-            $activity['timestamp_formatted'] = formatActivityTime($activity['created_at']);
-            
-            $activity['type_name'] = $activity['description'];
-            $activity['description_short'] = '';
-            
-            if (strpos($activity['description'], ': ') !== false) {
-                list($typeName, $desc) = explode(': ', $activity['description'], 2);
-                $activity['type_name'] = $typeName;
-                $activity['description_short'] = $desc;
+function handle_get_component(PDO $db): void
+{
+    $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+
+    if ($id) {
+        $stmt = $db->prepare(
+            "SELECT c.id, c.category_id, c.reference_id, c.reference_table, c.is_active,
+                    cat.name AS category_name, cat.code AS category_code
+             FROM components c
+             INNER JOIN component_categories cat ON c.category_id = cat.id
+             WHERE c.id = :id LIMIT 1"
+        );
+        $stmt->execute([':id' => $id]);
+        $comp = $stmt->fetch();
+
+        if (!$comp) {
+            send_response(false, 'Компонент не найден', 404);
+        }
+
+        $detail = $db->prepare("SELECT * FROM {$comp['reference_table']} WHERE id = :ref_id LIMIT 1");
+        $detail->execute([':ref_id' => $comp['reference_id']]);
+        $details = $detail->fetch();
+
+        if ($details) {
+            $main_id = $comp['id'];
+            foreach ($details as $key => $value) {
+                if ($key !== 'id') $comp[$key] = $value;
             }
-            
-            $activity['icon'] = getActivityIconFromType($activity['action_type']);
-            
-            if ($activity['user_id'] == 0) {
-                $activity['user_display'] = 'Система';
-            } else {
-                $activity['user_display'] = $activity['username'] ?: 'Пользователь #' . $activity['user_id'];
-            }
+            $comp['id'] = $main_id;
         }
-        
-        $countStmt = $pdo->query("SELECT COUNT(*) as total FROM activities");
-        $totalResult = $countStmt->fetch(PDO::FETCH_ASSOC);
-        $total = $totalResult['total'] ?? 0;
-        
-        echo json_encode([
-            'success' => true, 
-            'activities' => $activities,
-            'pagination' => [
-                'total' => $total,
-                'limit' => $limit,
-                'offset' => $offset
-            ]
-        ]);
-        
-    } catch(Exception $e) {
-        echo json_encode([
-            'success' => false, 
-            'activities' => [], 
-            'message' => $e->getMessage()
-        ]);
+
+        send_response(true, '', 200, ['component' => $comp]);
+    }
+
+    $page = (int) (filter_input(INPUT_GET, 'page', FILTER_VALIDATE_INT) ?: 1);
+    $limit = (int) (filter_input(INPUT_GET, 'limit', FILTER_VALIDATE_INT) ?: 10);
+    $category = filter_input(INPUT_GET, 'category', FILTER_SANITIZE_SPECIAL_CHARS);
+    $is_active = filter_input(INPUT_GET, 'is_active', FILTER_VALIDATE_INT);
+    $search = filter_input(INPUT_GET, 'search', FILTER_SANITIZE_SPECIAL_CHARS);
+    $sort_by = filter_input(INPUT_GET, 'sort_by', FILTER_SANITIZE_SPECIAL_CHARS) ?? 'created_at';
+    $sort_order = filter_input(INPUT_GET, 'sort_order', FILTER_SANITIZE_SPECIAL_CHARS) ?? 'desc';
+
+    $offset = ($page - 1) * $limit;
+    $where = ' WHERE 1=1';
+    $params = [];
+
+    if ($category && $category !== 'all') {
+        $where .= ' AND cat.code = :category';
+        $params[':category'] = $category;
+    }
+
+    if ($is_active !== null && $is_active !== '') {
+        $where .= ' AND c.is_active = :is_active';
+        $params[':is_active'] = (int) $is_active;
+    }
+
+    if ($search && $search !== '') {
+        $where .= ' AND EXISTS (
+            SELECT 1 FROM cpus ref WHERE ref.id = c.reference_id AND ref.name LIKE :search
+        )';
+        $params[':search'] = '%' . $search . '%';
+    }
+
+    $count_stmt = $db->prepare(
+        "SELECT COUNT(*) FROM components c
+         INNER JOIN component_categories cat ON c.category_id = cat.id" . $where
+    );
+    $count_stmt->execute($params);
+    $total = (int) $count_stmt->fetchColumn();
+
+    $query = "SELECT c.*, cat.name AS category_name, cat.code AS category_code
+              FROM components c
+              INNER JOIN component_categories cat ON c.category_id = cat.id
+              {$where}
+              ORDER BY c.{$sort_by} {$sort_order}
+              LIMIT {$limit} OFFSET {$offset}";
+
+    $stmt = $db->prepare($query);
+    $stmt->execute($params);
+    $components = $stmt->fetchAll();
+
+    send_response(true, '', 200, [
+        'components' => $components,
+        'pagination' => [
+            'total' => $total,
+            'page' => $page,
+            'limit' => $limit,
+            'pages' => (int) ceil($total / $limit),
+        ],
+    ]);
+}
+
+function handle_update_user_role(PDO $db, array $input): void
+{
+    $user_id = (int) ($input['user_id'] ?? 0);
+    $role = trim($input['role'] ?? '');
+
+    if (!$user_id || empty($role)) {
+        send_response(false, 'Не все данные предоставлены', 400);
+    }
+
+    $db->prepare('UPDATE users SET role = :role WHERE id = :id')
+       ->execute([':role' => $role, ':id' => $user_id]);
+
+    send_response(true, 'Роль обновлена', 200);
+}
+
+function handle_delete_user(PDO $db, array $input): void
+{
+    $id = (int) ($input['id'] ?? 0);
+    if (!$id) {
+        send_response(false, 'ID не указан', 400);
+    }
+
+    $stmt = $db->prepare("DELETE FROM users WHERE id = :id AND role != 'admin'");
+    $stmt->execute([':id' => $id]);
+
+    if ($stmt->rowCount() === 0) {
+        send_response(false, 'Нельзя удалить администратора или пользователь не найден', 400);
+    }
+
+    send_response(true, 'Пользователь удалён', 200);
+}
+
+function handle_delete_build(PDO $db, array $input): void
+{
+    $id = (int) ($input['id'] ?? 0);
+    if (!$id) {
+        send_response(false, 'ID не указан', 400);
+    }
+
+    $stmt = $db->prepare('DELETE FROM user_builds WHERE id = :id');
+    $stmt->execute([':id' => $id]);
+
+    if ($stmt->rowCount() === 0) {
+        send_response(false, 'Сборка не найдена', 404);
+    }
+
+    send_response(true, 'Сборка удалена', 200);
+}
+
+function handle_log_activity(PDO $db, array $input): void
+{
+    $has_table = $db->query("SHOW TABLES LIKE 'activities'")->rowCount() > 0;
+    if (!$has_table) {
+        send_response(true, 'Таблица активностей не найдена', 200);
+    }
+
+    $user_id = (int) ($input['user_id'] ?? 0);
+    $action_type = $input['type'] ?? '';
+    $description = $input['description'] ?? '';
+
+    $action_names = [
+        'user_register' => 'Регистрация',
+        'user_delete' => 'Удаление пользователя',
+        'user_role_change' => 'Изменение роли',
+        'build_save' => 'Сохранение сборки',
+        'build_delete' => 'Удаление сборки',
+        'component_add' => 'Добавление компонента',
+        'component_edit' => 'Редактирование компонента',
+        'component_delete' => 'Удаление компонента',
+        'component_toggle' => 'Изменение статуса',
+    ];
+
+    $readable_type = $input['readable_type'] ?? ($action_names[$action_type] ?? $action_type);
+    $full_description = $readable_type . ($description ? ': ' . $description : '');
+
+    $stmt = $db->prepare(
+        'INSERT INTO activities (user_id, action_type, description) VALUES (:user_id, :type, :desc)'
+    );
+    $stmt->execute([
+        ':user_id' => $user_id,
+        ':type' => $action_type,
+        ':desc' => $full_description,
+    ]);
+
+    send_response(true, 'Активность записана', 200, ['id' => (int) $db->lastInsertId()]);
+}
+
+function handle_get_activities(PDO $db): void
+{
+    $limit = (int) (filter_input(INPUT_GET, 'limit', FILTER_VALIDATE_INT) ?: 15);
+    $offset = (int) (filter_input(INPUT_GET, 'offset', FILTER_VALIDATE_INT) ?: 0);
+
+    $stmt = $db->prepare(
+        'SELECT a.*, u.username, u.email
+         FROM activities a
+         LEFT JOIN users u ON a.user_id = u.id
+         ORDER BY a.created_at DESC
+         LIMIT :limit OFFSET :offset'
+    );
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+    $activities = $stmt->fetchAll();
+
+    foreach ($activities as &$act) {
+        $act['timestamp_formatted'] = format_activity_time($act['created_at']);
+
+        if (str_contains($act['description'], ': ')) {
+            [$type_name, $desc] = explode(': ', $act['description'], 2);
+            $act['type_name'] = $type_name;
+            $act['description_short'] = $desc;
+        } else {
+            $act['type_name'] = $act['description'];
+            $act['description_short'] = '';
+        }
+
+        $act['user_display'] = $act['user_id'] == 0
+            ? 'Система'
+            : ($act['username'] ?: 'Пользователь #' . $act['user_id']);
+    }
+
+    $total = (int) $db->query('SELECT COUNT(*) FROM activities')->fetchColumn();
+
+    send_response(true, '', 200, [
+        'activities' => $activities,
+        'pagination' => ['total' => $total, 'limit' => $limit, 'offset' => $offset],
+    ]);
+}
+
+function handle_check_component_activity(PDO $db): void
+{
+    $component_id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?? 0;
+
+    if (!$component_id) {
+        send_response(false, 'Не указан ID', 400);
+    }
+
+    try {
+        $stmt = $db->prepare("SELECT is_active FROM components WHERE id = ?");
+        $stmt->execute([$component_id]);
+        $result = $stmt->fetch();
+
+        if ($result) {
+            send_response(true, '', 200, ['is_active' => (int) $result['is_active'] === 1]);
+        } else {
+            send_response(false, 'Компонент не найден', 404);
+        }
+    } catch (PDOException $e) {
+        send_response(false, 'Ошибка БД', 500);
     }
 }
 
-function formatActivityTime($timestamp) {
-    if (!$timestamp) return 'Недавно';
-    
+function normalize_json_field($value): array
+{
+    if (empty($value)) {
+        return [];
+    }
+
+    $decoded = json_decode($value, true);
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded)) {
+        return [];
+    }
+
+    return $decoded;
+}
+
+function format_activity_time(?string $timestamp): string
+{
+    if (!$timestamp) {
+        return 'Недавно';
+    }
+
     $now = new DateTime();
-    $activityTime = new DateTime($timestamp);
-    $interval = $now->diff($activityTime);
-    
-    if ($interval->d == 0) {
-        if ($interval->h == 0) {
-            if ($interval->i < 1) return 'только что';
-            return $interval->i . ' мин. назад';
+    $activity_time = new DateTime($timestamp);
+    $interval = $now->diff($activity_time);
+
+    if ($interval->d === 0) {
+        if ($interval->h === 0) {
+            return $interval->i < 1 ? 'только что' : $interval->i . ' мин. назад';
         }
         return $interval->h . ' ч. назад';
-    } elseif ($interval->d == 1) {
-        return 'вчера в ' . $activityTime->format('H:i');
-    } elseif ($interval->d < 7) {
-        return $interval->d . ' дн. назад';
-    } else {
-        return $activityTime->format('d.m.Y H:i');
     }
-}
 
-function getActivityIconFromType($actionType) {
-    $iconMap = [
-        'user_register' => '👤',
-        'user_delete' => '🗑️',
-        'user_role_change' => '🔄',
-        'build_save' => '💾',
-        'build_delete' => '🗑️',
-        'component_add' => '➕',
-        'component_edit' => '✏️',
-        'component_delete' => '🗑️',
-        'component_toggle' => '⚡',
-        'import_components' => '📥'
-    ];
-    
-    return $iconMap[$actionType] ?? '📝';
+    if ($interval->d === 1) {
+        return 'вчера в ' . $activity_time->format('H:i');
+    }
+
+    if ($interval->d < 7) {
+        return $interval->d . ' дн. назад';
+    }
+
+    return $activity_time->format('d.m.Y H:i');
 }
-ob_end_flush();
-?>

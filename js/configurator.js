@@ -1,2339 +1,1274 @@
-class Configurator {
-    constructor(dataManager, authManager) {
-        this.dataManager = dataManager;
-        this.authManager = authManager;
-        this.currentBuild = {
-            cpus: null,
-            motherboards: null,
-            rams: null,
-            gpus: null,
-            storages: [],
-            psus: null,
-            cases: null,
-            coolers: null
-        };
-        this.compatibilityStatus = {
-            isValid: false,
-            hasWarnings: false,
-            errors: [],
-            warnings: []
-        };
-        
-        this.openComponentSelection = this.openComponentSelection.bind(this);
-        this.handleAuthSubmit = this.handleAuthSubmit.bind(this);
-        
-        this.init();
-    }
+'use strict';
 
-    init() {     
-        this.loadBuildFromStorage();
+const Configurator = (() => {
+    let _data = null;
+    let _auth = null;
 
-        window.addEventListener('auth:logout', () => {
-            this.authManager.currentUser = null;
-            
-            this.currentBuild = this.getEmptyBuild();
-            
-            this.renderComponentCards();
-            this.calculate_power();
-            this.updateCompatibilityStatus();
-            this.clearBuildFromStorage();
-        });
-            
-        const domLoadedHandler = () => {
-            this.renderComponentCards();
-            this.calculate_power();
-            this.updateCompatibilityStatus();
-            this.initEventListeners();
-            this.initFavoritesModal();
-        };
-        
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', domLoadedHandler);
-        } else {
-            setTimeout(domLoadedHandler, 100);
-        }
-    }
+    const _build = {
+        cpus: null,
+        motherboards: null,
+        rams: null,
+        gpus: null,
+        storages: [],
+        psus: null,
+        cases: null,
+        coolers: null
+    };
 
-    
+    const _status = {
+        valid: false,
+        warnings: false,
+        errors: [],
+        warnings_list: [],
+        progress: 0,
+        selected: 0,
+        total: 8
+    };
 
-    renderComponentCards() {
-            Object.keys(this.currentBuild).forEach(type => {
-            this.renderComponentCard(type);
-        });
-        
-        const componentTypes = [
-            { type: 'cpus', name: 'Процессор' },
-            { type: 'motherboards', name: 'Материнская плата' },
-            { type: 'rams', name: 'Оперативная память' },
-            { type: 'gpus', name: 'Видеокарта' },
-            { type: 'storages', name: 'Накопители' },
-            { type: 'psus', name: 'Блок питания' },
-            { type: 'cases', name: 'Корпус' },
-            { type: 'coolers', name: 'Охлаждение' }
-        ];
-        
-        const container = document.getElementById('components-table-container');
-        if (!container) {
-            return;
-        }
-        
-        let html = '';
-        
-        componentTypes.forEach(typeInfo => {
-            if (typeInfo.type === 'storages') {
-                html += this.renderStorageComponent(typeInfo, this.currentBuild[typeInfo.type]);
-            } else {
-                html += this.renderSingleComponent(typeInfo, this.currentBuild[typeInfo.type]);
-            }
-        });
-        
-        container.innerHTML = html;
-        
-        this.updateTotalPriceDisplay();
-        this.updateCompatibilityStatus();
-    }
+    let _saving = false;
 
-    updateTotalPriceDisplay() {
-        const totalPrice = this.calculateTotalPrice();
-        const totalPriceElement = document.getElementById('total-price');
-        
-        if (totalPriceElement) {
-            totalPriceElement.textContent = this.formatPrice(totalPrice) + ' ₽';
-        }
-        
-        const buildPriceElement = document.getElementById('build-price');
-        if (buildPriceElement) {
-            buildPriceElement.textContent = this.formatPrice(totalPrice) + ' ₽';
-        }
-    }
+    const TYPE_NAMES = Object.freeze({
+        cpus: 'Процессор', motherboards: 'Материнская плата', rams: 'Оперативная память',
+        gpus: 'Видеокарта', storages: 'Накопители', psus: 'Блок питания',
+        cases: 'Корпус', coolers: 'Охлаждение'
+    });
 
-    initFavoritesModal() {
-        const modal = document.getElementById('favorites-modal');
-        if (!modal) return;
+    const REQUIRED = Object.freeze(['cpus', 'motherboards', 'rams']);
 
-        const closeBtn = modal.querySelector('.close-button');
-        
-        if (closeBtn) {
-            closeBtn.onclick = () => modal.classList.add('hidden');
-        }
+    const ICONS = Object.freeze({
+        cpus: 'source/icons/cpu_icon.png', motherboards: 'source/icons/motherboard_icon.png',
+        rams: 'source/icons/ram_icon.png', gpus: 'source/icons/gpu_icon.png',
+        storages: 'source/icons/hdd_icon.png', psus: 'source/icons/power_supply_icon.png',
+        cases: 'source/icons/pc_case_icon.png', coolers: 'source/icons/cooler_cpu_icon.png'
+    });
 
-        window.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.classList.add('hidden');
-            }
-        });
+    const DEFAULT_POWER = Object.freeze({
+        cpus: 65, gpus: 150, motherboards: 50, rams: 5,
+        coolers: 8, cases: 10, storages: 5
+    });
 
-        const favLink = document.getElementById('favorites-link');
-        if (favLink) {
-            favLink.onclick = (e) => {
-                e.preventDefault();
-                this.showFavorites();
-            };
-        }
-    }
+    const FORM_FACTOR_HIERARCHY = Object.freeze({
+        'E-ATX': ['E-ATX', 'ATX', 'MICRO-ATX', 'MINI-ITX'],
+        'ATX': ['ATX', 'MICRO-ATX', 'MINI-ITX'],
+        'MICRO-ATX': ['MICRO-ATX', 'MINI-ITX'],
+        'MINI-ITX': ['MINI-ITX']
+    });
 
-    getComponentIconPath(componentType) {
-        const iconMap = {
-            'cpus': 'source/icons/cpu_icon.png',
-            'motherboards': 'source/icons/motherboard_icon.png',
-            'rams': 'source/icons/ram_icon.png',
-            'gpus': 'source/icons/gpu_icon.png',
-            'storages': 'source/icons/hdd_icon.png',
-            'psus': 'source/icons/power_supply_icon.png',
-            'cases': 'source/icons/pc_case_icon.png',
-            'coolers': 'source/icons/cooler_cpu_icon.png'
-        };
-        
-        let path = iconMap[componentType];
-        
-        if (!path) {
-            const alternativeMap = {
-                'cpu': 'cpus',
-                'motherboard': 'motherboards',
-                'ram': 'rams',
-                'gpu': 'gpus',
-                'storage': 'storages',
-                'psu': 'psus',
-                'case': 'cases',
-                'cooler': 'coolers'
-            };
-            
-            const alternativeType = alternativeMap[componentType];
-            if (alternativeType) {
-                path = iconMap[alternativeType];
-            }
-        }
-        
-        if (!path) {
-            path = 'source/icons/default_component.png';
-        }
-        return path;
-    }
+    const _format_price = (price) => {
+        if (!price && price !== 0) return '0';
+        return new Intl.NumberFormat('ru-RU').format(price);
+    };
 
-    getComponentEmoji(componentType) {
-        const emojiMap = {
-            'cpus': '⚡',
-            'cpu': '⚡',
-            'motherboards': '🔌',
-            'motherboard': '🔌',
-            'rams': '💾',
-            'ram': '💾',
-            'gpus': '🎮',
-            'gpu': '🎮',
-            'storages': '💿',
-            'storage': '💿',
-            'psus': '🔋',
-            'psu': '🔋',
-            'coolers': '❄️',
-            'cooler': '❄️',
-            'cases': '🖥️',
-            'case': '🖥️'
-        };
-        return emojiMap[componentType] || '❓';
-    }
+    const _show_loader = () => {
+        const loader = document.getElementById('global-loader');
+        if (loader) loader.classList.remove('hidden');
+    };
 
-    initEventListeners() {
-        let self = this
-        const saveBtn = document.getElementById('save-build-btn');
-        if (saveBtn) {
-            saveBtn.onclick = (e) => this.saveBuildToServer(e); 
-        }
-        const resetBtn = document.getElementById('reset-build-btn');
-        if (resetBtn) {
-            const newResetBtn = resetBtn.cloneNode(true);
-            resetBtn.parentNode.replaceChild(newResetBtn, resetBtn);
-            
-            const updatedResetBtn = document.getElementById('reset-build-btn');
-            
-            updatedResetBtn.addEventListener('click', function resetHandler(e) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                self.resetBuild();
-            });
-        }
-        const powerToggle = document.getElementById('power-toggle');
-        const powerWidget = document.querySelector('.power-widget');
-        const powerDetails = document.getElementById('power-details');
-        
-        if (powerToggle && powerWidget && powerDetails) {
-            powerToggle.replaceWith(powerToggle.cloneNode(true));
-            
-            const newPowerToggle = document.getElementById('power-toggle');
-            let isAnimating = false;
-            
-            newPowerToggle.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopImmediatePropagation(); 
-                
-                isAnimating = true;
+    const _hide_loader = () => {
+        const loader = document.getElementById('global-loader');
+        if (loader) loader.classList.add('hidden');
+    };
 
-                const isActive = powerWidget.classList.toggle('active');
-                
-                if (isActive) {
-                    powerDetails.style.maxHeight = '450px';
-                    powerDetails.style.opacity = '1';
-                } else {
-                    powerDetails.style.maxHeight = '0';
-                    powerDetails.style.opacity = '0';
-                }
-                
-                setTimeout(() => {
-                    isAnimating = false;
-                }, 300);
-            });
-        } 
+    const _show_message = (text, type = 'success') => {
+        const oldMsg = document.querySelector('.custom-toast');
+        if (oldMsg) oldMsg.remove();
         
-        const overclockCheckbox = document.getElementById('overclock-check');
-        if (overclockCheckbox) {
-            overclockCheckbox.addEventListener('change', () => {
-                this.calculate_power();
-            });
-        }
+        const msg = document.createElement('div');
+        msg.className = `custom-toast toast-${type}`;
+        msg.textContent = text;
+        
+        document.body.appendChild(msg);
+        
+        setTimeout(() => msg.classList.add('show'), 10);
+        
+        setTimeout(() => {
+            msg.classList.remove('show');
+            setTimeout(() => msg.remove(), 300);
+        }, 3000);
+    };
+    const _save_storage = () => {
+        localStorage.setItem('currentBuild', JSON.stringify(_build));
+    };
 
-        const authForm = document.getElementById('auth-form');
-        if (authForm) {
-            authForm.addEventListener('submit', (e) => this.handleAuthSubmit(e));
-        }
-        
-        document.getElementById('logout-link')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            this.authManager.logout();
-        });
-        
-        document.getElementById('login-link')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            this.authManager.showAuthModal();
-        });
-    }
+    const _clear_storage = () => {
+        localStorage.removeItem('currentBuild');
+    };
 
-    async openComponentSelection(componentType) {
-        
-        if (window.modalManager && typeof window.modalManager.showComponentModal === 'function') {
-            const filters = this.dataManager.getCompatibilityFilters(this.currentBuild);
-            await window.modalManager.showComponentModal(componentType, filters);
-            return;
-        }
-        
-        if (this.modalManager && typeof this.modalManager.showComponentModal === 'function') {
-            const filters = this.dataManager.getCompatibilityFilters(this.currentBuild);
-            await this.modalManager.showComponentModal(componentType, filters);
-            return;
-        }
-         
-        if (!this.dataManager) {
-            this.showMessage('менеджер данных не загружен', 'error');
-            return;
-        }
-    }
-
-
-
-
-    selectComponent(componentType, componentData) {
-        if (!componentType && componentType !== '') {    
-            if (componentData && componentData.category_id) {
-                const categoryMap = {
-                    1: 'cpus',
-                    2: 'motherboards', 
-                    3: 'rams',
-                    4: 'gpus',
-                    5: 'storages',
-                    6: 'psus',
-                    7: 'cases',
-                    8: 'coolers'
-                };
-                componentType = categoryMap[componentData.category_id];
-            }
-            
-            if (!componentType) {
-                this.showMessage('тип компонента не определен', 'error');
-                return;
-            }
-        }
-    
-        
-        if (!componentType) {
-            this.showMessage('тип компонента не определен', 'error');
-            return;
-        }
-        
-        if (!componentData) {
-            this.showMessage('нет данных компонента', 'error');
-            return;
-        }
-        
-        let realComponent = this.extractComponentData(componentData);
-        
-        if (!realComponent) {
-            this.showMessage('неверный формат данных компонента', 'error');
-            return;
-        }
-        
-        
-        if (!realComponent.id) {
-            realComponent.id = Date.now();
-        }
-        if (!realComponent.name) {
-            realComponent.name = 'Компонент ' + componentType;
-        }
-        
-        if (!realComponent.category) {
-            const categoryMap = {
-                'cpus': 'cpu',
-                'motherboards': 'motherboard',
-                'rams': 'ram',
-                'gpus': 'gpu',
-                'storages': 'storage',
-                'psus': 'psu',
-                'cases': 'case',
-                'coolers': 'cooler'
-            };
-            realComponent.category = categoryMap[componentType] || componentType;
-        }
-        
-        if (componentType === 'storages') {
-            if (!this.currentBuild.storages) {
-                this.currentBuild.storages = [];
-            }
-            this.currentBuild.storages.push(realComponent);
-        } else {
-            this.currentBuild[componentType] = realComponent;
-        }
-        
-        if (this.currentBuild.null !== undefined) {
-            delete this.currentBuild.null;
-        }
-        
-        
-        this.renderComponentCards();
-        this.updateCompatibilityStatus();
-        this.calculate_power();
-        this.saveBuildToStorage();
-        
-        this.showMessage(`"${realComponent.name}" добавлен в сборку!`, 'success');
-    }
-
-    extractComponentData(data) {
+    const _extract = (data) => {
         if (!data) return null;
-        
-        if (data.id && data.name) {
-            return data;
-        }
-        
-        if (data.success && data.component) {
-            return data.component;
-        }
-        
-        if (data.component) {
-            return data.component;
-        }
-        
-        if (Array.isArray(data) && data.length > 0) {
-            return data[0];
-        }
+        if (data.id && data.name) return data;
+        if (data.success && data.component) return data.component;
+        if (data.component) return data.component;
+        if (Array.isArray(data) && data.length > 0) return data[0];
         return data;
-    }
+    };
 
-    getComponentSpecs(component) { 
-        if (!component) return ['Характеристики не указаны'];
-        
-        if (component.critical_specs) {
-            if (Array.isArray(component.critical_specs)) {
-                return component.critical_specs;
-            } else if (typeof component.critical_specs === 'string') {
-                try {
-                    const parsed = JSON.parse(component.critical_specs);
-                    if (Array.isArray(parsed)) return parsed;
-                } catch (e) {
-                    return [component.critical_specs];
-                }
-            }
-        }
-        
-        if (component.specs && Array.isArray(component.specs)) {
-            return component.specs;
-        }
-        
-        const specs = [];
+    const _normalize = (component, type) => ({
+        id: component.component_id || component.id,
+        reference_id: component.reference_id || component.id,
+        name: component.name || 'Компонент',
+        price: component.price || 0,
+        category: type ? type.replace(/s$/, '') : (component.category || ''),
+        image: component.image || '',
+        socket: component.socket || '',
+        memory_type: component.memory_type || '',
+        wattage: component.wattage || 0,
+        capacity: component.capacity || 0,
+        speed: component.speed || '',
+        tdp: component.tdp || 0,
+        type: component.type || '',
+        form_factor: component.form_factor || '',
+        chipset: component.chipset || '',
+        cores: component.cores || 0,
+        threads: component.threads || 0,
+        frequency: component.frequency || '',
+        memory_size: component.memory_size || 0,
+        interface: component.interface || '',
+        memory_slots: component.memory_slots || 0,
+        m2_slots: component.m2_slots || 0,
+        sata_ports: component.sata_ports || 0,
+        modules: component.modules || 0,
+        supported_motherboards: component.supported_motherboards || '',
+        socket_compatibility: component.socket_compatibility || '',
+        supported_form_factors: component.supported_form_factors || '',
+        max_gpu_length: component.max_gpu_length || 0,
+        max_cpu_cooler_height: component.max_cpu_cooler_height || 0,
+        manufacturer: component.manufacturer || '',
+        is_active: component.is_active !== undefined ? component.is_active : 1,
+        rgb: component.rgb || 0,
+        cas_latency: component.cas_latency || '',
+        efficiency: component.efficiency || '',
+        modular: component.modular || '',
+        pcie_connectors: component.pcie_connectors || 0,
+        sata_connectors: component.sata_connectors || 0,
+        pcie_version: component.pcie_version || '',
+        wifi: component.wifi || 0,
+        read_speed: component.read_speed || 0,
+        write_speed: component.write_speed || 0,
+        _pending_check: false
+    });
+
+    const _get_icon = (type) => ICONS[type] || 'source/icons/default_component.png';
+
+    const _get_image = (component, type) => {
+        if (!component) return _get_icon(type);
+        const data = component.component || component;
+        if (!data.image) return _get_icon(type);
+        let path = data.image.toString().trim();
+        path = path.replace(/^\.\//, '').replace(/^\/+/, '');
+        if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:') || path.startsWith('blob:')) return path;
+        if (path.startsWith('source/') || path.startsWith('images/')) return path;
+        const map = { cpu: 'cpus', cpus: 'cpus', motherboard: 'motherboards', motherboards: 'motherboards', ram: 'rams', rams: 'rams', gpu: 'gpus', gpus: 'gpus', storage: 'storages', storages: 'storages', psu: 'psus', psus: 'psus', cooler: 'coolers', coolers: 'coolers', case: 'cases', cases: 'cases' };
+        const cat = data.category ? map[data.category.toLowerCase()] || data.category : (map[type] || 'components');
+        return `source/${cat}/${path}`;
+    };
+
+    const _get_specs = (component) => {
+        if (!component) return 'Характеристики не указаны';
         
         const fields = [
             { key: 'socket', label: 'Сокет' },
             { key: 'memory_type', label: 'Память' },
             { key: 'type', label: 'Тип' },
-            { key: 'capacity', label: 'Объем' },
-            { key: 'speed', label: 'Скорость' },
+            { key: 'capacity', label: 'Объем', suffix: ' ГБ' },
+            { key: 'speed', label: 'Частота', suffix: ' МГц' },
             { key: 'wattage', label: 'Мощность', suffix: 'W' },
             { key: 'form_factor', label: 'Форм-фактор' },
             { key: 'tdp', label: 'TDP', suffix: 'W' },
             { key: 'cores', label: 'Ядер' },
-            { key: 'threads', label: 'Потоков' },
-            { key: 'frequency', label: 'Частота' }
+            { key: 'chipset', label: 'Чипсет' },
+            { key: 'memory_size', label: 'Память', suffix: ' ГБ' },
+            { key: 'supported_motherboards', label: 'Поддержка:' },
+            { key: 'max_cpu_cooler_height', label: 'Макс. высота кулера', suffix: ' мм' },
+            { key: 'modules', label: 'Модулей', suffix: ' шт' },
+            { key: 'efficiency', label: 'КПД' },
+            { key: 'modular', label: 'Модульность' },
+            { key: 'interface', label: 'Интерфейс' },
+            { key: 'read_speed', label: 'Чтение', suffix: ' МБ/с' },
+            { key: 'write_speed', label: 'Запись', suffix: ' МБ/с' },
+            { key: 'frequency', label: 'Частота' },
+            { key: 'socket_compatibility', label: 'Совместимость' }
         ];
         
-        fields.forEach(field => {
-            if (component[field.key]) {
-                const value = component[field.key];
-                specs.push(`${field.label}: ${value}${field.suffix || ''}`);
+        const parts = [];
+        fields.forEach(f => {
+            if (component[f.key] && component[f.key] !== '0' && component[f.key] !== 0) {
+                parts.push(`${f.label}: ${component[f.key]}${f.suffix || ''}`);
             }
         });
         
-        return specs.length > 0 ? specs : ['Характеристики не указаны'];
-    }
+        return parts.length > 0 ? parts.slice(0, 3).join(' | ') : 'Характеристики не указаны';
+    };
 
-    getComponentData(rawComponent) {
-        if (!rawComponent) return null;
-        if (rawComponent.component) {
-            return rawComponent.component;
-        }
-        return rawComponent;
-    }
-
-    removeComponent(componentType, index = null) {        
-        if (confirm('Убрать компонент из сборки?')) {
-            if (componentType === 'storages' && index !== null) {
-                if (Array.isArray(this.currentBuild.storages)) {
-                    this.currentBuild.storages.splice(index, 1);
-                }
-            } else {
-                this.currentBuild[componentType] = null;
-            }
-            
-            this.renderComponentCards();
-            this.calculate_power();
-            this.updateCompatibilityStatus();
-            this.saveBuildToStorage();
-            this.showMessage('Компонент удален из сборки', 'success');
-        }
-    }
-
-    async updateCompatibilityStatus() {
-        this.showLoader();
-        
-        try {
-            this.compatibilityStatus = this.dataManager.validateCompatibility(this.currentBuild);
-            
-            const componentTypes = ['cpus', 'motherboards', 'rams', 'gpus', 'storages', 'psus', 'cases', 'coolers'];
-            
-            let selectedCount = 0;
-            const totalCount = 8;
-            
-            for (const type of componentTypes) {
-                const component = this.currentBuild[type];
-                if (type === 'storages') {
-                    if (Array.isArray(component) && component.length > 0) {
-                        selectedCount++;
-                    }
-                } else if (component !== null && component !== undefined) {
-                    selectedCount++;
-                }
-            }
-            
-            this.compatibilityStatus.selectedCount = selectedCount;
-            this.compatibilityStatus.totalCount = totalCount;
-            this.compatibilityStatus.progress = (selectedCount / totalCount) * 100;
-            
-            this.compatibilityStatus.errors = [];
-            this.compatibilityStatus.warnings = [];
-            
-            for (const type of componentTypes) {
-                const component = this.currentBuild[type];
-                if (!component) continue;
-                
-                if (type === 'storages' && Array.isArray(component)) {
-                    component.forEach((storage, index) => {
-                        const compatibility = this.checkComponentCompatibility(type, storage);
-                        if (!compatibility.compatible) {
-                            this.compatibilityStatus.warnings.push({
-                                component1: type,
-                                component2: type,
-                                message: `Накопитель ${index + 1}: ${compatibility.message}`
-                            });
-                        }
-                    });
-                } else {
-                    const compatibility = this.checkComponentCompatibility(type, component);
-                    if (!compatibility.compatible) {
-                        this.compatibilityStatus.warnings.push({
-                            component1: type,
-                            component2: type,
-                            message: compatibility.message
-                        });
-                    }
-                }
-            }
-            
-            this.compatibilityStatus.isValid = this.compatibilityStatus.errors.length === 0;
-            this.compatibilityStatus.hasWarnings = this.compatibilityStatus.warnings.length > 0;
-            
-            this.renderCompatibilityStatus();
-            this.updateSaveButton();
-            this.updateComponentStatuses();
-            this.updateSaveButtonState();
-            
-        } catch (error) {
-        } finally {
-            setTimeout(() => {
-                this.hideLoader();
-            }, 300);
-        }
-    }
-    
-    renderCompatibilityStatus() {
-        const progressBar = document.getElementById('progress-bar');
-        const compatibilityText = document.getElementById('compatibility-text');
-        const compatibilityCount = document.getElementById('compatibility-count');
-
-        if (!progressBar || !compatibilityText || !compatibilityCount) return;
-        
-        let statusMessage = '';
-        const progress = this.compatibilityStatus.progress || 0;
-        const selectedCount = this.compatibilityStatus.selectedCount || 0;
-        const totalCount = this.compatibilityStatus.totalCount || 8;
-
-        compatibilityCount.textContent = `${selectedCount}/${totalCount}`;
-        progressBar.style.width = `${progress}%`;
-        
-        if (progress === 100 && this.compatibilityStatus.isValid) {
-            progressBar.style.background = 'linear-gradient(90deg, #28a745, #20c997)';
-        } else if (progress >= 50) {
-            progressBar.style.background = 'linear-gradient(90deg, #ffc107, #fd7e14)';
-        } else {
-            progressBar.style.background = 'linear-gradient(90deg, #dc3545, #e83e8c)';
-        }
-
-        if (selectedCount === 0) {
-            statusMessage = 'Выберите компоненты для совместимости';
-        } else if (this.compatibilityStatus.isValid && !this.compatibilityStatus.hasWarnings) {
-            if (selectedCount === totalCount) {
-                statusMessage = 'Все компоненты совместимы!';
-            } else {
-                statusMessage = `Выбранные компоненты совместимы. Выбрано ${selectedCount} из ${totalCount} компонентов.`;
-            }
-        } else if (this.compatibilityStatus.isValid && this.compatibilityStatus.hasWarnings) {
-            statusMessage = 'Предупреждения к компонентам: ' + 
-                        this.compatibilityStatus.warnings.map(w => w.message).join('; ');
-        } else {
-            statusMessage = 'Обнаружены ошибки совместимости: ' + 
-                        this.compatibilityStatus.errors.map(e => e.message).join('; ');
-        }
-        
-        compatibilityText.textContent = statusMessage;
-        compatibilityText.className = `compatibility-text ${this.compatibilityStatus.isValid ? 
-            (this.compatibilityStatus.hasWarnings ? 'warning' : 'success') : 'error'}`;
-    }
-
-    updateSaveButton() {
-        const saveButton = document.getElementById('save-build-btn');
-        const canSave = this.compatibilityStatus.isValid && 
-                       Object.values(this.currentBuild).some(component => {
-                           if (Array.isArray(component)) {
-                               return component.length > 0;
-                           }
-                           return component !== null;
-                       });
-
-        saveButton.classList.toggle('disabled', !canSave);
-        saveButton.disabled = !canSave;
-    }
-
-    calculateTotalPrice() {
+    const _total_price = () => {
         let total = 0;
-        
-        Object.keys(this.currentBuild).forEach(type => {
-            const item = this.currentBuild[type];
-            
-            if (!item) return; 
-
+        for (const [type, item] of Object.entries(_build)) {
+            if (!item) continue;
             if (type === 'storages' && Array.isArray(item)) {
-                item.forEach(storage => {
-                    total += parseFloat(storage.price || 0);
-                });
+                item.forEach(s => { total += parseFloat(s.price || 0); });
             } else {
                 total += parseFloat(item.price || 0);
             }
-        });
-        
+        }
         return total;
-    }
-    
-    async saveBuildToFavorites(buildData) {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                let favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
-                favorites.push(buildData);
-                localStorage.setItem('favorites', JSON.stringify(favorites));
-                resolve();
-            }, 500);
+    };
+
+    const _update_price = () => {
+        const total = _total_price();
+        const el = document.getElementById('total-price');
+        if (el) el.textContent = `${_format_price(total)} Р`;
+        const bp = document.getElementById('build-price');
+        if (bp) bp.textContent = `${_format_price(total)} Р`;
+    };
+
+    const _get_status = (type, component) => {
+        if (!component) return 'unknown';
+        
+        if (component.is_active !== undefined && Number(component.is_active) === 0) return 'inactive';
+
+        const has_error = _status.errors.some(e => {
+            if (e.component1 === type || e.component2 === type) return true;
+            const type_name = TYPE_NAMES[type] || type;
+            const error_lower = e.message.toLowerCase();
+            if (type === 'cpus' && error_lower.includes('процессор')) return true;
+            if (type === 'motherboards' && (error_lower.includes('материнск') || error_lower.includes('плат'))) return true;
+            if (type === 'rams' && error_lower.includes('памят')) return true;
+            if (type === 'gpus' && error_lower.includes('видеокарт')) return true;
+            if (type === 'storages' && error_lower.includes('накопител')) return true;
+            if (type === 'psus' && error_lower.includes('бп')) return true;
+            if (type === 'cases' && error_lower.includes('корпус')) return true;
+            if (type === 'coolers' && error_lower.includes('кулер')) return true;
+            return false;
         });
-    }
 
-    resetBuild() {
-        if (confirm('Вы уверены, что хотите сбросить текущую сборку?')) {
-            this.currentBuild = {
-                cpus: null,
-                motherboards: null,
-                rams: null,
-                gpus: null,
-                storages: [],
-                psus: null,
-                cases: null,
-                coolers: null
-            };
+        if (has_error) return 'error';
+
+        const has_warning = _status.warnings_list.some(w => {
+            if (w.component1 === type || w.component2 === type) return true;
+            const type_name = TYPE_NAMES[type] || type;
+            const warning_lower = w.message.toLowerCase();
+            if (type === 'cpus' && warning_lower.includes('процессор')) return true;
+            if (type === 'motherboards' && (warning_lower.includes('материнск') || warning_lower.includes('плат'))) return true;
+            if (type === 'rams' && warning_lower.includes('памят')) return true;
+            if (type === 'gpus' && warning_lower.includes('видеокарт')) return true;
+            if (type === 'storages' && warning_lower.includes('накопител')) return true;
+            if (type === 'psus' && warning_lower.includes('бп')) return true;
+            if (type === 'cases' && warning_lower.includes('корпус')) return true;
+            if (type === 'coolers' && warning_lower.includes('кулер')) return true;
+            return false;
+        });
+
+        if (has_warning) return 'warning';
+
+        return _status.valid ? 'success' : 'success';
+    };
+
+    const _check_activity = async (type, component) => {
+        try {
+            const res = await fetch(`api/admin.php?action=check_component_activity&id=${component.id}`);
+            if (!res.ok) { component.is_active = 1; return; }
+            const data = await res.json();
+            if (data.success) {
+                component.is_active = data.is_active ? 1 : 0;
+                _render_cards();
+            }
+        } catch (e) { component.is_active = 1; }
+    };
+
+    const _status_icon = (s) => ({ success: '\u2713', warning: '\u26A0', error: '\u2717', inactive: '\u26A0' }[s] || '?');
+    const _status_text = (s) => ({
+        success: 'Компонент совместим', warning: 'Есть предупреждение',
+        error: 'Компонент несовместим', inactive: 'Компонент неактивен'
+    }[s] || 'Статус неизвестен');
+
+    const _load_storage = async () => {
+        const saved = localStorage.getItem('currentBuild');
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                Object.assign(_build, parsed);
+                _render_cards();
+                _calc_power();
+                _check_compat();
+            } catch(e) {}
+        }
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const buildId = urlParams.get('load_build_id');
+        if (buildId) {
+            await _load_saved_build_from_db(buildId);
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    };
+
+    const _load_saved_build_from_db = async (buildId) => {
+        _show_loader();
+        try {
+            const response = await fetch(`api/builds.php?action=get_builds`);
+            const data = await response.json();
             
-            this.renderComponentCards();
-            this.updateCompatibilityStatus();
-            this.clearBuildFromStorage();
-            this.calculate_power();
-            this.showMessage('Сборка сброшена', 'success');
-        }
-    }
-
-    renderComponentCard(component, componentType, isSelected = false) {
-        if (!component) {
-            return '';
-        }
-        
-        const componentData = component.component || component;
-        
-        const price = componentData.price ? this.formatPrice(componentData.price) : 'Цена не указана';
-        const name = componentData.name || 'Без названия';
-        const specs = componentData.critical_specs ? 
-            (Array.isArray(componentData.critical_specs) ? 
-                componentData.critical_specs.slice(0, 2).join(' • ') : 
-                componentData.critical_specs) : 
-        '';
-        
-        const componentId = componentData.id;
-        
-        const imagePath = this.getComponentImagePath(componentData, componentType);
-        
-        const cardClass = isSelected ? 'component-card selected' : 'component-card';
-        const selectedClass = isSelected ? 'selected' : '';
-        
-        return `
-            <div class="${cardClass} ${selectedClass}" 
-                data-component-id="${componentId}" 
-                data-component-type="${componentType}">
-                <div class="component-card-image">
-                    <img src="${imagePath}" 
-                        alt="${name}" 
-                        class="component-image"
-                        onerror="this.onerror=null; this.src='source/icons/default_component.png'; this.alt='Изображение не найдено'">
-                    ${isSelected ? '<div class="selected-badge">✓</div>' : ''}
-                </div>
-                <div class="component-card-content">
-                    <div class="component-card-header">
-                        <h4 class="component-card-name">${name}</h4>
-                        <div class="component-card-price">${price} ₽</div>
-                    </div>
-                    ${specs ? `<div class="component-card-specs">${specs}</div>` : ''}
-                    <div class="component-card-actions">
-                        <button class="btn-component-info" onclick="window.configurator.showComponentDetails('${componentType}', ${componentId})">
-                            Подробнее
-                        </button>
-                        ${!isSelected ? 
-                            `<button class="btn-select" onclick="window.configurator.selectComponent('${componentType}', ${componentId})">
-                                Выбрать
-                            </button>` : 
-                            `<button class="btn-remove" onclick="window.configurator.removeComponent('${componentType}')">
-                                Удалить
-                            </button>`
-                        }
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    calculate_power() {
-        let totalPower = 0;
-        const build = this.currentBuild;
-        
-        let detailsHTML = '';
-        let hasComponents = false;
-        
-    
-        const defaultWattages = {
-            cpus: 65,       
-            gpus: 150,      
-            motherboards: 50, 
-            rams: 5,        
-            coolers: 8,     
-            cases: 10,      
-            psus: 0,        
-            storages: 5     
-        };
-        
-        if (build.cpus) {
-            hasComponents = true;
-            let cpuPower = parseInt(build.cpus.wattage) || defaultWattages.cpus;
-            totalPower += cpuPower;
-            detailsHTML += `<div class="power-item"><span>Процессор</span> <span>${cpuPower} W</span></div>`;
-        }
-        
-        if (build.gpus) {
-            hasComponents = true;
-            let gpuPower = parseInt(build.gpus.wattage) || defaultWattages.gpus;
-            totalPower += gpuPower;
-            detailsHTML += `<div class="power-item"><span>Видеокарта</span> <span>${gpuPower} W</span></div>`;
-        }
-        
-
-        if (build.motherboards) {
-            hasComponents = true;
-            let mbPower = parseInt(build.motherboards.wattage);
-            if (isNaN(mbPower) || mbPower <= 0) mbPower = defaultWattages.motherboards;
-            totalPower += mbPower;
-            detailsHTML += `<div class="power-item"><span>Материнская плата</span> <span>${mbPower} W</span></div>`;
-        }
-        
-        if (build.rams) {
-            hasComponents = true;
-            let ramPower = parseInt(build.rams.wattage);
-            if (isNaN(ramPower) || ramPower <= 0) ramPower = defaultWattages.rams;
-            totalPower += ramPower;
-            detailsHTML += `<div class="power-item"><span>Оперативная память</span> <span>${ramPower} W</span></div>`;
-        }
-        
-        if (Array.isArray(build.storages) && build.storages.length > 0) {
-            hasComponents = true;
-            build.storages.forEach((storage, index) => {
-                let storagePower = parseInt(storage.wattage) || defaultWattages.storages;
-                totalPower += storagePower;
-                detailsHTML += `<div class="power-item"><span>Накопитель ${index + 1}</span> <span>${storagePower} W</span></div>`;
+            let build = null;
+            if (data.builds) {
+                build = data.builds.find(b => b.id == buildId);
+            }
+            
+            if (!build) {
+                const pubResponse = await fetch('api/builds.php?action=get_public');
+                const pubData = await pubResponse.json();
+                if (pubData.builds) {
+                    build = pubData.builds.find(b => b.id == buildId);
+                }
+            }
+            
+            if (!build) {
+                _show_message('Сборка не найдена', 'error');
+                _hide_loader();
+                return;
+            }
+            
+            let comps = build.components || {};
+            if (!Object.keys(comps).length && build.compatibility_data) {
+                try { comps = JSON.parse(build.compatibility_data); } catch(e) { comps = {}; }
+            }
+            
+            Object.assign(_build, {
+                cpus: null, motherboards: null, rams: null, gpus: null,
+                storages: [], psus: null, cases: null, coolers: null
             });
-        }
-        
-        if (build.coolers) {
-            hasComponents = true;
-            let coolerPower = parseInt(build.coolers.wattage);
-            if (isNaN(coolerPower) || coolerPower <= 0) coolerPower = defaultWattages.coolers;
-            totalPower += coolerPower;
-            detailsHTML += `<div class="power-item"><span>Кулер процессора</span> <span>${coolerPower} W</span></div>`;
-        }
-        
-        if (build.cases) {
-            hasComponents = true;
-            let casePower = parseInt(build.cases.wattage);
-            if (isNaN(casePower) || casePower <= 0) casePower = defaultWattages.cases;
-            totalPower += casePower;
-            detailsHTML += `<div class="power-item"><span>Корпус</span> <span>${casePower} W</span></div>`;
-        }
-        
-        if (build.psus) {
-            hasComponents = true;
-            let psuWattage = parseInt(build.psus.wattage) || 0;
-            if (psuWattage > 0) {
-                detailsHTML += `<div class="power-item"><span>Блок питания</span> <span>${psuWattage} W</span></div>`;
-            }
-        }
-        
-        const overclockCheckbox = document.getElementById('overclock-check');
-        if (overclockCheckbox && overclockCheckbox.checked && hasComponents) {
-            let cpuPower = build.cpus ? (parseInt(build.cpus.wattage) || defaultWattages.cpus) : 0;
-            let gpuPower = build.gpus ? (parseInt(build.gpus.wattage) || defaultWattages.gpus) : 0;
-            let overclockPower = Math.ceil((cpuPower + gpuPower) * 0.20);
             
-            if (overclockPower > 0) {
-                totalPower += overclockPower;
-                detailsHTML += `<div class="power-item" style="color: #ff9800"><span>Разгон (+20%)</span> <span>+${overclockPower} W</span></div>`;
-            }
-        }
-        
-        const wattageElement = document.getElementById('total-wattage');
-        if (wattageElement) {
-            wattageElement.innerText = totalPower;
-        }
-        
-        const breakdownList = document.getElementById('power-breakdown-list');
-        if (breakdownList) {
-            if (!hasComponents) {
-                breakdownList.innerHTML = `<div class="no-components">Выберите компоненты для расчета</div>`;
-            } else {
-                detailsHTML += `<div class="power-divider"></div>`;
-                detailsHTML += `<div class="power-item total"><span>Итого потребление</span> <span>${totalPower} W</span></div>`;
-                const recommendedPower = Math.ceil(totalPower * 1.2);
-                const psu12vPower = build.psus ? Math.round((parseInt(build.psus.wattage) || 0) * 0.85) : 0;
-                const powerDelta = psu12vPower - totalPower;
-                detailsHTML += `<div class="power-item delta"><span>Запас мощности</span> <span>${powerDelta} W</span></div>`;
-                detailsHTML += `<div class="power-item recommendation"><span>Рекомендуемый БП</span> <span>от ${recommendedPower} W</span></div>`;
-                if (build.psus) {
-                    const psuWattage = parseInt(build.psus.wattage) || 0;
-                    if (psuWattage > 0) {
-                        if (psuWattage < totalPower) {
-                            detailsHTML += `<div class="power-item warning"><span>Выбранный БП (${psuWattage}W) маловат</span></div>`;
-                        } else if (psuWattage >= recommendedPower) {
-                            detailsHTML += `<div class="power-item ok"><span>Выбранный БП (${psuWattage}W) подходит</span></div>`;
+            const categories = ['cpus', 'motherboards', 'rams', 'gpus', 'psus', 'cases', 'coolers'];
+            
+            for (const type of categories) {
+                const item = comps[type];
+                if (item && item.id) {
+                    try {
+                        const compRes = await fetch(`api/components.php?id=${item.id}`);
+                        const compData = await compRes.json();
+                        if (compData.success && compData.component) {
+                            _build[type] = _normalize(compData.component, type);
                         } else {
-                            detailsHTML += `<div class="power-item warning"><span>Выбранный БП (${psuWattage}W) без запаса</span></div>`;
+                            _build[type] = _normalize(item, type);
                         }
+                    } catch(e) {
+                        _build[type] = _normalize(item, type);
                     }
                 }
-                
-                breakdownList.innerHTML = detailsHTML;
             }
+            
+            if (Array.isArray(comps.storages)) {
+                _build.storages = await Promise.all(comps.storages.map(async (s) => {
+                    try {
+                        const compRes = await fetch(`api/components.php?id=${s.id}`);
+                        const compData = await compRes.json();
+                        if (compData.success && compData.component) {
+                            return _normalize(compData.component, 'storages');
+                        }
+                        return _normalize(s, 'storages');
+                    } catch(e) { 
+                        return _normalize(s, 'storages');
+                    }
+                }));
+            }
+            
+            _save_storage();
+            
+            _render_cards();
+            _calc_power();
+            setTimeout(() => {
+                _check_compat();
+                _update_price();
+            }, 100);
+            
+            _show_message(`Сборка "${build.name}" загружена`, 'success');
+            
+        } catch(e) {
+            console.error(e);
+            _show_message('Ошибка загрузки сборки', 'error');
         }
-        
-        return totalPower;
-    }
+        _hide_loader();
+    };
 
-    animateValue(obj, start, end, duration) {
-        let startTimestamp = null;
-        const step = (timestamp) => {
-            if (!startTimestamp) startTimestamp = timestamp;
-            const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-            obj.innerHTML = Math.floor(progress * (end - start) + start);
-            if (progress < 1) {
-                window.requestAnimationFrame(step);
-            }
-        };
-        window.requestAnimationFrame(step);
-    }
+    const _render_cards = () => {
+        const pc = localStorage.getItem('pc_build');
+        if (pc) {
+            try {
+                const parsed = JSON.parse(pc);
+                if (parsed.null !== undefined) delete parsed.null;
+                const fixed = { 
+                    cpus: parsed.cpus || null, 
+                    motherboards: parsed.motherboards || null, 
+                    rams: parsed.rams || null, 
+                    gpus: parsed.gpus || null, 
+                    storages: parsed.storages || [], 
+                    psus: parsed.psus || null, 
+                    cases: parsed.cases || null, 
+                    coolers: parsed.coolers || null 
+                };
+                Object.assign(_build, fixed);
+                localStorage.removeItem('pc_build');
+                _save_storage();
+            } catch (e) {}
+        }
 
-    renderSingleComponent(typeInfo, component) {
-        const hasComponent = component && component.name;
+        const container = document.getElementById('components-table-container');
+        if (!container) return;
+
+        _check_compat();
         
-        const iconPath = this.getComponentIconPath(typeInfo.type);
-        const fallbackEmoji = this.getComponentEmoji(typeInfo.type);
-        
-        const iconHtml = `
-            <div class="component-icon">
-                <img src="${iconPath}" 
-                    alt="${typeInfo.name}" 
-                    class="component-icon-img"
-                    onerror="
-                        this.style.display = 'none';
-                        const emojiSpan = this.parentNode.querySelector('.component-icon-emoji');
-                        if (emojiSpan) emojiSpan.style.display = 'block';
-                    ">
-                <span class="component-icon-emoji" style="display: none;">${fallbackEmoji}</span>
-            </div>
-        `;
-        
-        const isRequired = this.isRequiredComponent(typeInfo.type);
-        const requiredBadge = isRequired ? '<span class="required-badge" title="Необходим для работоспособности системы">*</span>' : '';
-        
-        const rowClass = isRequired && !hasComponent ? 'component-row missing-required' : 'component-row';
-        
-        let html = `
-            <div class="component-with-selection" data-component-type="${typeInfo.type}">
-                <div class="${rowClass}">
-                    <div class="component-name">
-                        ${iconHtml}
-                        <span>${typeInfo.name}</span>
-                        ${requiredBadge}
+        const types = [
+            { type: 'cpus', name: 'Процессор' }, 
+            { type: 'motherboards', name: 'Материнская плата' },
+            { type: 'rams', name: 'Оперативная память' }, 
+            { type: 'gpus', name: 'Видеокарта' },
+            { type: 'storages', name: 'Накопители' }, 
+            { type: 'psus', name: 'Блок питания' },
+            { type: 'cases', name: 'Корпус' }, 
+            { type: 'coolers', name: 'Охлаждение' }
+        ];
+
+        let html = '';
+        types.forEach(info => {
+            html += info.type === 'storages' ? 
+                _render_storage(info, _build[info.type]) : 
+                _render_single(info, _build[info.type]);
+        });
+        container.innerHTML = html;
+        _update_price();
+    };
+
+    const _render_single = (info, component) => {
+        const has = component && component.name;
+        const icon = _get_icon(info.type);
+        const required = REQUIRED.includes(info.type);
+        const badge = required ? '<span class="required-badge" title="Обязательный компонент">*</span>' : '';
+        const row_class = required && !has ? 'component-row missing-required' : 'component-row';
+
+        let html = `<div class="component-with-selection" data-component-type="${info.type}">
+            <div class="${row_class}">
+                <div class="component-name">
+                    <div class="component-icon">
+                        <img src="${icon}" alt="${info.name}" class="component-icon-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <span class="component-icon-emoji" style="display:none;">${info.name[0]}</span>
                     </div>
-                    <div class="component-action">
-                        <button class="btn-select-component" 
-                                onclick="window.configurator.openComponentSelection('${typeInfo.type}')">
-                            ${hasComponent ? 'Изменить' : 'Выбрать'}
-                        </button>
+                    <span>${info.name}</span>${badge}
+                </div>
+                <div class="component-action">
+                    <button class="btn-select-component" onclick="Configurator.openSelection('${info.type}')">${has ? 'Изменить' : 'Выбрать'}</button>
+                </div>
+            </div>`;
+
+        if (has) {
+            const name = `<a href="component.html?id=${component.id}&type=${info.type}" class="component-link" onclick="event.stopPropagation()">${component.name || 'Без названия'}</a>`;
+            const price = component.price ? `${_format_price(component.price)} Р` : 'Цена не указана';
+            const specs = _get_specs(component);
+            const status = _get_status(info.type, component);
+            const image = _get_image(component, info.type);
+
+            html += `<div class="selected-component-view ${status}">
+                <div class="selected-component-main">
+                    <div class="selected-component-image">
+                        <img src="${image}" alt="${component.name || ''}" onerror="this.onerror=null; this.src='${icon}';">
+                    </div>
+                    <div class="selected-component-info">
+                        <div class="selected-component-name-row">
+                            <h4 class="selected-component-name">${name}</h4>
+                            <span class="selected-component-status" title="${_status_text(status)}">${_status_icon(status)}</span>
+                        </div>
+                        <div class="selected-component-specs">${specs}</div>
+                        <div class="selected-component-price-row">
+                            <span class="selected-component-price">${price}</span>
+                            <button class="btn-remove-selected" onclick="Configurator.removeComponent('${info.type}')">Убрать из сборки</button>
+                        </div>
                     </div>
                 </div>
-        `;
-        
-        if (hasComponent) {
-            const name = component.name || 'Без названия';
-            const price = component.price ? `${this.formatPrice(component.price)} ₽` : 'Цена не указана';
-            
-            let specs = 'Характеристики не указаны';
-            if (component.critical_specs) {
-                if (Array.isArray(component.critical_specs)) {
-                    specs = component.critical_specs.slice(0, 3).join(' • ');
-                } else if (typeof component.critical_specs === 'string') {
-                    specs = component.critical_specs;
-                }
-            }
-            
-            const status = this.get_Status(typeInfo.type, component);
-            const statusText = this.get_text(status);
-            const statusIcon = this.get_icon(status);
-            
-            const componentImage = this.getComponentImagePath(component, typeInfo.type);
-            
-            html += `
-                <div class="selected-component-view ${status}">
+            </div>`;
+        }
+        html += '</div>';
+        return html;
+    };
+
+    const _render_storage = (info, items) => {
+        const storages = Array.isArray(items) ? items : [];
+        const has = storages.length > 0;
+        const icon = _get_icon(info.type);
+
+        let html = `<div class="component-with-selection" data-component-type="${info.type}">
+            <div class="component-row">
+                <div class="component-name">
+                    <div class="component-icon">
+                        <img src="${icon}" alt="${info.name}" class="component-icon-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <span class="component-icon-emoji" style="display:none;">${info.name[0]}</span>
+                    </div>
+                    <span>${info.name} ${has ? `(${storages.length})` : ''}</span>
+                </div>
+                <div class="component-action">
+                    <button class="btn-select-component" onclick="Configurator.openSelection('${info.type}')">${has ? 'Добавить ещё' : 'Добавить накопитель'}</button>
+                </div>
+            </div>`;
+
+        if (has) {
+            storages.forEach((storage, index) => {
+                const name = storage.name ? `<a href="component.html?id=${storage.id}&type=${info.type}" class="component-link" onclick="event.stopPropagation()">${storage.name}</a>` : 'Накопитель';
+                const price = storage.price ? `${_format_price(storage.price)} Р` : 'Цена не указана';
+                const specs = _get_specs(storage);
+                const status = _get_status(info.type, storage);
+                const image = _get_image(storage, info.type);
+
+                html += `<div class="selected-component-view ${status}" data-index="${index}">
                     <div class="selected-component-main">
                         <div class="selected-component-image">
-                            <img src="${componentImage}" alt="${name}" 
-                                onerror="
-                                    this.onerror = null;
-                                    this.src = '${iconPath}';
-                                    this.alt = '${name} - изображение не найдено';
-                                ">
+                            <img src="${image}" alt="${storage.name || ''}" onerror="this.onerror=null; this.src='${icon}';">
                         </div>
                         <div class="selected-component-info">
                             <div class="selected-component-name-row">
                                 <h4 class="selected-component-name">${name}</h4>
-                                <span class="selected-component-status" title="${statusText}">
-                                    ${statusIcon}
-                                </span>
+                                <span class="selected-component-status" title="${_status_text(status)}">${_status_icon(status)}</span>
                             </div>
                             <div class="selected-component-specs">${specs}</div>
                             <div class="selected-component-price-row">
                                 <span class="selected-component-price">${price}</span>
-                                <button class="btn-remove-selected" 
-                                        onclick="window.configurator.removeComponent('${typeInfo.type}')">
-                                    Убрать из сборки
-                                </button>
+                                <button class="btn-remove-selected" onclick="Configurator.removeComponent('${info.type}', ${index})">Убрать</button>
                             </div>
                         </div>
                     </div>
-                </div>
-            `;
-        }
-        
-        html += '</div>';
-        return html;
-    }
-
-
-    isRequiredComponent(componentType) {
-        const requiredComponents = ['cpus', 'motherboards', 'rams'];
-        return requiredComponents.includes(componentType);
-    }
-
-    renderStorageComponent(typeInfo, storageComponents) {
-        const storages = Array.isArray(storageComponents) ? storageComponents : [];
-        const hasStorages = storages.length > 0;
-        
-        const iconPath = this.getComponentIconPath(typeInfo.type);
-        const fallbackEmoji = this.getComponentEmoji(typeInfo.type);
-        
-        const iconHtml = `
-            <div class="component-icon">
-                <img src="${iconPath}" 
-                    alt="${typeInfo.name}" 
-                    class="component-icon-img"
-                    onerror="
-                        this.style.display = 'none';
-                        const emojiSpan = this.parentNode.querySelector('.component-icon-emoji');
-                        if (emojiSpan) emojiSpan.style.display = 'block';
-                    ">
-                <span class="component-icon-emoji" style="display: none;">${fallbackEmoji}</span>
-            </div>
-        `;
-        
-        let html = `
-            <div class="component-with-selection" data-component-type="${typeInfo.type}">
-                <div class="component-row">
-                    <div class="component-name">
-                        ${iconHtml}
-                        <span>${typeInfo.name} ${hasStorages ? `(${storages.length})` : ''}</span>
-                    </div>
-                    <div class="component-action">
-                        <button class="btn-select-component" 
-                                onclick="window.configurator.openComponentSelection('${typeInfo.type}')">
-                            ${hasStorages ? 'Добавить ещё' : 'Добавить накопитель'}
-                        </button>
-                    </div>
-                </div>
-        `;
-        
-        if (hasStorages) {
-            storages.forEach((storage, index) => {
-                const storageName = storage.name || 'Накопитель';
-                const storagePrice = storage.price ? this.formatPrice(storage.price) + ' ₽' : 'Цена не указана';
-                
-                let storageSpecs = 'Характеристики не указаны';
-                if (storage.critical_specs) {
-                    if (Array.isArray(storage.critical_specs)) {
-                        storageSpecs = storage.critical_specs.slice(0, 2).join(' • ');
-                    } else if (typeof storage.critical_specs === 'string') {
-                        storageSpecs = storage.critical_specs;
-                    }
-                }
-                
-                const storageStatus = this.get_Status(typeInfo.type, storage);
-                const statusText = this.get_text(storageStatus);
-                const statusIcon = this.get_icon(storageStatus);
-                
-                const storageImage = this.getComponentImagePath(storage, typeInfo.type);
-                
-                html += `
-                    <div class="selected-component-view ${storageStatus}" data-index="${index}">
-                        <div class="selected-component-main">
-                            <div class="selected-component-image">
-                                <img src="${storageImage}" alt="${storageName}" 
-                                    onerror="
-                                        this.onerror = null;
-                                        this.src = '${iconPath}';
-                                        this.alt = '${storageName} - изображение не найдено';
-                                    ">
-                            </div>
-                            <div class="selected-component-info">
-                                <div class="selected-component-name-row">
-                                    <h4 class="selected-component-name">${storageName}</h4>
-                                    <span class="selected-component-status" title="${statusText}">
-                                        ${statusIcon}
-                                    </span>
-                                </div>
-                                <div class="selected-component-specs">${storageSpecs}</div>
-                                <div class="selected-component-price-row">
-                                    <span class="selected-component-price">${storagePrice}</span>
-                                    <button class="btn-remove-selected" 
-                                            onclick="window.configurator.removeComponent('${typeInfo.type}', ${index})">
-                                        Убрать
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
+                </div>`;
             });
         }
-        
         html += '</div>';
         return html;
-    }
+    };
 
-    getCategoryFolder(component, componentType) {
-        if (component && component.category) {
-            const categoryMap = {
-                'cpu': 'cpus', 'процессор': 'cpus',
-                'motherboard': 'motherboards', 'материнская плата': 'motherboards',
-                'ram': 'rams', 'оперативная память': 'rams',
-                'gpu': 'gpus', 'видеокарта': 'gpus',
-                'storage': 'storages', 'накопитель': 'storages',
-                'ssd': 'storages', 'hdd': 'storages',
-                'psu': 'psus', 'блок питания': 'psus',
-                'case': 'cases', 'корпус': 'cases',
-                'cooler': 'coolers', 'охлаждение': 'coolers'
-            };
-            return categoryMap[component.category.toLowerCase()] || component.category;
-        }
-        
+    const _calc_power = () => {
+        let total = 0;
+        let details = '';
+        let has = false;
 
-        const typeMap = {
-            'cpus': 'cpus',
-            'motherboards': 'motherboards',
-            'rams': 'rams',
-            'gpus': 'gpus',
-            'storages': 'storages',
-            'psus': 'psus',
-            'cases': 'cases',
-            'coolers': 'coolers'
-        };
-        
-        return typeMap[componentType] || componentType || 'components';
-    }
-
-    async showFavorites() {
-        if (!this.authManager.isLoggedIn()) {
-            this.authManager.showAuthModal();
-            return;
-        }
-
-        const modal = document.getElementById('favorites-modal');
-        modal.classList.remove('hidden');
-        
-        await this.loadUserBuilds();
-    }
-
-    async loadUserBuilds() {
-        const grid = document.getElementById('favorites-grid');
-        const loader = document.getElementById('favorites-loading');
-        
-        grid.innerHTML = '';
-        loader.classList.remove('hidden');
-
-        try {
-            const response = await fetch('api/admin.php?action=get_builds');
-            const data = await response.json();
-
-            loader.classList.add('hidden');
-
-            if (data.success && data.builds && data.builds.length > 0) {
-                const currentUserId = this.authManager.currentUser?.id;
-                const userBuilds = data.builds.filter(build => build.user_id == currentUserId);
-                
-                
-                if (userBuilds.length > 0) {
-                    this.renderFavorites(userBuilds);
-                } else {
-                    grid.innerHTML = `
-                        <div class="no-data" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 20px; width: 100%;">
-                            <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 20px;">
-                            <h3 style="margin-bottom: 10px; color: #333; font-size: 18px;">Мои сборки</h3>
-                            <p style="margin-bottom: 20px; font-size: 16px; color: #666;">Нет сохраненных сборок.</p>
-                            <button class="btn btn-primary" onclick="document.getElementById('favorites-modal').classList.add('hidden')" style="margin-top: 10px; width: auto; padding: 10px 30px;">
-                                Создать первую сборку
-                            </button>
-                        </div>
-                    `;
-                }
+        for (const [type, item] of Object.entries(_build)) {
+            if (!item || type === 'psus') continue; 
+            if (type === 'storages' && Array.isArray(item)) {
+                item.forEach((s, i) => {
+                    has = true;
+                    const p = parseInt(s.wattage) || parseInt(s.tdp) || DEFAULT_POWER.storages || 0;
+                    total += p;
+                    details += `<div class="power-item"><span>Накопитель ${i + 1}</span><span>${p} W</span></div>`;
+                });
             } else {
-                grid.innerHTML = `
-                        <div class="no-data" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 20px; width: 100%;">
-                            <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 20px;">
-                            <h3 style="margin-bottom: 10px; color: #333; font-size: 18px;">Мои сборки</h3>
-                            <p style="margin-bottom: 20px; font-size: 16px; color: #666;">Нет сохраненных сборок.</p>
-                            <button class="btn btn-primary" onclick="document.getElementById('favorites-modal').classList.add('hidden')" style="margin-top: 10px; width: auto; padding: 10px 30px;">
-                                Создать первую сборку
-                            </button>
-                        </div>
-                    `;
-            }
-        } catch (error) {
-            loader.classList.add('hidden');
-            grid.innerHTML = '<div class="no-data error">Не удалось загрузить сборки. Попробуйте позже.</div>';
-        }
-    }
-
-    async renderFavorites(builds) {
-        const grid = document.getElementById('favorites-grid');
-
-        const currentUser = this.authManager.currentUser;
-        const filteredBuilds = builds.filter(build => {
-            if (currentUser && currentUser.role === 'admin') {
-                return true;
-            }
-            return build.user_id === (currentUser ? currentUser.id : 0);
-        });
-        
-        if (!builds || builds.length === 0) {
-            grid.innerHTML = `
-                        <div class="no-data" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 20px; width: 100%;">
-                            <img src="source/icons/pc_case_icon.png" style="width: 64px; opacity: 0.5; margin-bottom: 20px;">
-                            <h3 style="margin-bottom: 10px; color: #333; font-size: 18px;">Мои сборки</h3>
-                            <p style="margin-bottom: 20px; font-size: 16px; color: #666;">Нет сохраненных сборок.</p>
-                            <button class="btn btn-primary" onclick="document.getElementById('favorites-modal').classList.add('hidden')" style="margin-top: 10px; width: auto; padding: 10px 30px;">
-                                Создать первую сборку
-                            </button>
-                        </div>
-                    `;
-            return;
-        }
-        
-        grid.innerHTML = builds.map(build => {
-            let components = build.components;
-            if (typeof components === 'string') {
-                try {
-                    components = JSON.parse(components);
-                } catch (e) {
-                    components = {};
+                has = true;
+                let p = 0;
+                if (type === 'coolers') {
+                    p = DEFAULT_POWER.coolers;
+                    details += `<div class="power-item"><span>${TYPE_NAMES[type]}</span><span>${p} W</span></div>`;
+                } else {
+                    p = parseInt(item.tdp) || parseInt(item.wattage) || DEFAULT_POWER[type] || 0;
+                    details += `<div class="power-item"><span>${TYPE_NAMES[type]}</span><span>${p} W</span></div>`;
                 }
+                total += p;
             }
-            
-            let componentCount = 0;
-            if (components) {
-                Object.values(components).forEach(comp => {
-                    if (Array.isArray(comp)) {
-                        componentCount += comp.length;
-                    } else if (comp && typeof comp === 'object' && comp.id) {
-                        componentCount++;
+        }
+
+        const oc = document.getElementById('overclock-check');
+        if (oc && oc.checked && has) {
+            const cpu_p = parseInt(_build.cpus?.wattage) || DEFAULT_POWER.cpus;
+            const gpu_p = parseInt(_build.gpus?.wattage) || DEFAULT_POWER.gpus;
+            const extra = Math.ceil((cpu_p + gpu_p) * 0.2);
+            if (extra > 0) {
+                total += extra;
+                details += `<div class="power-item"><span>Разгон (+20%)</span><span>+${extra} W</span></div>`;
+            }
+        }
+
+        const watt_el = document.getElementById('total-wattage');
+        if (watt_el) watt_el.innerText = total;
+
+        const list = document.getElementById('power-breakdown-list');
+        if (list) {
+            if (!has) {
+                list.innerHTML = '<div class="no-components">Выберите компоненты для расчета</div>';
+            } else {
+                details += '<div class="power-divider"></div>';
+                details += `<div class="power-item total"><span>Итого потребление</span><span>${total} W</span></div>`;
+                const rec = Math.ceil(total * 1.2);
+                const psu_12v = _build.psus ? Math.round((parseInt(_build.psus.wattage) || 0) * 0.85) : 0;
+                const delta = psu_12v - total;
+                details += `<div class="power-item delta"><span>Запас мощности</span><span>${delta} W</span></div>`;
+                details += `<div class="power-item recommendation"><span>Рекомендуемый БП</span><span>от ${rec} W</span></div>`;
+                if (_build.psus) {
+                    const pw = parseInt(_build.psus.wattage) || 0;
+                    if (pw > 0) {
+                        if (pw < total) details += `<div class="power-item warning"><span>БП (${pw}W) маловат</span></div>`;
+                        else if (pw >= rec) details += `<div class="power-item ok"><span>БП (${pw}W) подходит</span></div>`;
+                        else details += `<div class="power-item warning"><span>БП (${pw}W) без запаса</span></div>`;
                     }
+                }
+                list.innerHTML = details;
+            }
+        }
+        return total;
+    };
+
+    const _extract_mem_slots = (mb) => {
+        if (!mb) return 4;
+        if (mb.memory_slots) return parseInt(mb.memory_slots);
+        if (mb.critical_specs) {
+            const specs = Array.isArray(mb.critical_specs) ? mb.critical_specs : 
+                        (typeof mb.critical_specs === 'string' ? JSON.parse(mb.critical_specs) : []);
+            for (const s of specs) { 
+                const m = s.match(/(\d+)\s*слот/); 
+                if (m) return parseInt(m[1]); 
+            }    }
+        const name = (mb.name || '').toUpperCase();
+        if (name.includes('MINI-ITX')) return 2;
+        if (name.includes('MICRO-ATX')) return 2;
+        if (name.includes('ATX')) return 4;
+        if (name.includes('E-ATX')) return 8;
+        return 4;
+    };
+
+    const _extract_m2 = (mb) => {
+        if (!mb) return 1;
+        if (mb.m2_slots) return parseInt(mb.m2_slots);
+        if (mb.critical_specs) {
+            const specs = Array.isArray(mb.critical_specs) ? mb.critical_specs : 
+                        (typeof mb.critical_specs === 'string' ? JSON.parse(mb.critical_specs) : []);
+            for (const s of specs) {
+                const m = s.match(/(\d+)\s*(?:x|слот|слота|слотов)?\s*M\.?2/i);
+                if (m) return parseInt(m[1]);
+                if (s.match(/2x?\s*M\.?2/i) || s.includes('2 M.2')) return 2;
+                if (s.match(/3x?\s*M\.?2/i) || s.includes('3 M.2')) return 3;
+                if (s.match(/4x?\s*M\.?2/i) || s.includes('4 M.2')) return 4;
+                if (s.includes('M.2') && !m) return 1;
+            }
+        }
+        const name = (mb.name || '').toUpperCase();
+        if (name.includes('X670') || name.includes('Z790') || name.includes('X570')) return 4;
+        if (name.includes('B650') || name.includes('B660') || name.includes('B550')) return 2;
+        if (name.includes('H610') || name.includes('A520')) return 1;
+        return 1;
+    };
+
+    const _extract_sata = (mb) => {
+        if (!mb) return 4;
+        if (mb.sata_ports) return parseInt(mb.sata_ports);
+        if (mb.critical_specs) {
+            const specs = Array.isArray(mb.critical_specs) ? mb.critical_specs : 
+                        (typeof mb.critical_specs === 'string' ? JSON.parse(mb.critical_specs) : []);
+            for (const s of specs) { 
+                const m = s.match(/(\d+)\s*порт.*?SATA/i); 
+                if (m) return parseInt(m[1]); 
+            }
+        }
+        const name = (mb.name || '').toUpperCase();
+        if (name.includes('X670') || name.includes('Z790') || name.includes('X570')) return 8;
+        if (name.includes('B650') || name.includes('B660') || name.includes('B550')) return 6;
+        if (name.includes('H610') || name.includes('A520')) return 4;
+        return 4;
+    };
+
+    const _check_compat = () => {
+        _status.errors = [];
+        _status.warnings_list = [];
+        const cpu = _build.cpus;
+        const mb = _build.motherboards;
+        const ram = _build.rams;
+        const gpu = _build.gpus;
+        const storages = Array.isArray(_build.storages) ? _build.storages : [];
+        const psu = _build.psus;
+        const pc_case = _build.cases;
+        const cooler = _build.coolers;
+
+        let sel = 0;
+        for (const [t, item] of Object.entries(_build)) {
+            if (t === 'storages') { if (Array.isArray(item) && item.length > 0) sel++; }
+            else if (item) sel++;
+        }
+        _status.selected = sel;
+        _status.total = 8;
+        _status.progress = (sel / 8) * 100;
+
+        if (cpu && mb) {
+            if (cpu.socket && mb.socket && cpu.socket.toUpperCase() !== mb.socket.toUpperCase()) {
+                _status.errors.push({
+                    component1: 'cpus', component2: 'motherboards',
+                    message: `Сокет процессора (${cpu.socket}) не совпадает с сокетом платы (${mb.socket})`
                 });
             }
+        }
+
+        if (ram && mb) {
+            const ram_type = (ram.type || ram.memory_type || ram.memory || '').toUpperCase();
+            const mb_type = (mb.memory_type || mb.memory || '').toUpperCase();
             
-            const iconsHTML = this.renderBuildIcons(components || {});
-            
-            const buildDate = new Date(build.created_at).toLocaleDateString('ru-RU');
-            
-            const totalPrice = Number(build.total_price).toLocaleString('ru-RU');
-            
-            return `
-            <div class="build-card" id="build-${build.id}">
-                <div class="build-card-header">
-                    <span class="build-id">#${build.id}</span>
-                    <div class="build-stats">
-                        <span class="component-count">${componentCount} компонентов</span>
-                        <span class="build-date">${buildDate}</span>
-                    </div>
-                </div>
+            if (ram_type && mb_type) {
+                const mb_ddr4 = mb_type.includes('DDR4'), mb_ddr5 = mb_type.includes('DDR5');
+                const ram_ddr4 = ram_type.includes('DDR4'), ram_ddr5 = ram_type.includes('DDR5');
                 
-                ${iconsHTML ? `
-                <div class="build-preview-row">
-                    ${iconsHTML}
-                </div>
-                ` : '<div class="no-components">Нет выбранных компонентов</div>'}
-                
-                <div class="build-card-content">
-                    <h3>${build.name || 'Конфигурация ПК'}</h3>
-                    <p class="user">${build.username || 'Сборка'}</p>
-                    <div class="price">${totalPrice} ₽</div>
-                </div>
-
-                <div class="build-actions">
-                    <button class="btn-load-build" onclick="configurator.loadSavedBuild(${build.id})">
-                        Загрузить
-                    </button>
-                    <button class="btn-delete-build" onclick="configurator.deleteSavedBuild(${build.id})">
-                        Удалить
-                    </button>
-                </div>
-            </div>`;
-        }).join('');
-
-        this.cachedBuilds = builds;
-    }
-
-    renderBuildIcons(components) {
-        if (!components) return '';
-        
-        const allCategories = [
-            { key: 'cpus', name: 'Процессор', icon: 'cpu_icon.png' },
-            { key: 'motherboards', name: 'Материнская плата', icon: 'motherboard_icon.png' },
-            { key: 'rams', name: 'Оперативная память', icon: 'ram_icon.png' },
-            { key: 'gpus', name: 'Видеокарта', icon: 'gpu_icon.png' },
-            { key: 'psus', name: 'Блок питания', icon: 'power_supply_icon.png' },
-            { key: 'cases', name: 'Корпус', icon: 'pc_case_icon.png' },
-            { key: 'coolers', name: 'Охлаждение', icon: 'cooler_cpu_icon.png' },
-            { key: 'storages', name: 'Накопители', icon: 'hdd_icon.png' }
-        ];
-        
-        let iconsHTML = '';
-        
-        allCategories.forEach(category => {
-            const item = components[category.key];
-            
-            if (category.key === 'storages') {
-                if (Array.isArray(item) && item.length > 0) {
-                    const maxToShow = 3;
-                    const storagesToShow = item.slice(0, maxToShow);
-                    
-                    storagesToShow.forEach((storage, index) => {
-                        if (storage && storage.id) {
-                            const title = storage.name || `Накопитель ${index + 1}`;
-                            const imgSrc = storage.image ? 
-                                this.getImagePath(storage.image, category.key) : 
-                                `source/icons/${category.icon}`;
-                            
-                            iconsHTML += `
-                                <div class="mini-icon-slot storage-icon" title="${title}">
-                                    <img src="${imgSrc}" alt="${title}" 
-                                        onerror="this.src='source/icons/${category.icon}'">
-                                    ${index === 0 && item.length > maxToShow ? 
-                                        `<span class="storage-count">+${item.length - maxToShow}</span>` : ''}
-                                </div>
-                            `;
-                        }
+                if ((mb_ddr4 && ram_ddr5) || (mb_ddr5 && ram_ddr4)) {
+                    _status.errors.push({
+                        component1: 'rams', component2: 'motherboards',
+                        message: `Память ${ram_type} не подходит к разъемам ${mb_type} на материнской плате`
                     });
                 }
-            } 
-            else {
-                if (item && typeof item === 'object' && item.id) {
-                    const title = item.name || category.name;
-                    const imgSrc = item.image ? 
-                        this.getImagePath(item.image, category.key) : 
-                        `source/icons/${category.icon}`;
-                    
-                    iconsHTML += `
-                        <div class="mini-icon-slot" title="${title}">
-                            <img src="${imgSrc}" alt="${title}" 
-                                onerror="this.src='source/icons/${category.icon}'">
-                        </div>
-                    `;
-                }
-            }
-        });
-        
-        return iconsHTML;
-    }
-
-    getImagePath(imageName, category) {
-        if (!imageName) return `source/icons/${category}_icon.png`;
-        
-        imageName = imageName.trim();
-        
-        if (imageName.startsWith('http://') || 
-            imageName.startsWith('https://') || 
-            imageName.startsWith('data:')) {
-            return imageName;
-        }
-        
-        if (imageName.startsWith('source/')) {
-            return imageName;
-        }
-        
-        return `source/${category}/${imageName}`;
-    }
-
-    getFullComponentData(component, componentType) {
-        if (component.image || component.category) {
-            return component;
-        }
-        
-        const componentId = component.id;
-        
-        if (this.currentBuild[componentType]) {
-            if (componentType === 'storages' && Array.isArray(this.currentBuild[componentType])) {
-                const found = this.currentBuild[componentType].find(item => item.id == componentId);
-                if (found) return found;
-            } else if (this.currentBuild[componentType] && this.currentBuild[componentType].id == componentId) {
-                return this.currentBuild[componentType];
-            }
-        }
-        
-        if (this.dataManager) {
-            const allComponents = this.dataManager.getCachedComponents();
-            if (allComponents) {
-                for (const category in allComponents) {
-                    if (allComponents[category]) {
-                        const found = allComponents[category].find(comp => comp.id == componentId);
-                        if (found) return found;
-                    }
-                }
-            }
-        }
-        
-        return {
-            ...component,
-            category: componentType.slice(0, -1), 
-            category_id: this.getCategoryId(componentType)
-        };
-    }
-
-    getCategoryId(componentType) {
-        const map = {
-            'cpus': 1,
-            'motherboards': 2,
-            'rams': 3,
-            'gpus': 4,
-            'storages': 5,
-            'psus': 6,
-            'cases': 7,
-            'coolers': 8
-        };
-        return map[componentType] || 0;
-    }
-
-    async loadSavedBuild(buildId) {
-        const build = this.cachedBuilds?.find(b => b.id == buildId);
-        
-        if (!build) {
-            alert("Сборка не найдена");
-            return;
-        }
-        
-        if (!confirm(`Загрузить сборку "${build.name}"?`)) return;
-        
-        this.showLoader('Загрузка компонентов...');
-        
-        try {
-            this.currentBuild = this.getEmptyBuild();
-            
-            let components = build.components;
-            
-            if (!components && build.compatibility_data) {
-                try {
-                    components = JSON.parse(build.compatibility_data);
-                } catch (e) {
-                    components = {};
-                }
             }
             
-            let inactiveComponents = [];
-            let hasComponents = false;
-            
-            if (components && typeof components === 'object') {
-                for (const [type, componentData] of Object.entries(components)) {
-                    if (!componentData) continue;
-                    
-                    if (type === 'storages' && Array.isArray(componentData)) {
-                        const activeStorages = [];
-                        for (const item of componentData) {
-                            const normalized = this.normal_component(item, type);
-                            activeStorages.push(normalized);
-                            const isActive = await this.checkComponentActivity(item.id, type);
-                            if (!isActive) {
-                                inactiveComponents.push({
-                                    type: type,
-                                    name: normalized.name,
-                                    id: item.id
-                                });
-                            }
-                        }
-                        if (activeStorages.length > 0) {
-                            this.currentBuild[type] = activeStorages;
-                            hasComponents = true;
-                        }
-                    } else if (componentData && componentData.id) {
-                        const normalized = this.normal_component(componentData, type);
-                        this.currentBuild[type] = normalized;
-                        hasComponents = true;
-                        const isActive = await this.checkComponentActivity(componentData.id, type);
-                        if (!isActive) {
-                            inactiveComponents.push({
-                                type: type,
-                                name: normalized.name,
-                                id: componentData.id
-                            });
-                        }
-                    }
-                }
-            }
-            
-            this.saveBuildToStorage();
-            this.calculate_power();
-            this.renderComponentCards();
-            this.updateCompatibilityStatus();
-            
-            this.showMessage(`Сборка "${build.name}" загружена!`, 'success');
-            
-            const modal = document.getElementById('favorites-modal');
-            if (modal) modal.classList.add('hidden');
-            
-        } catch (error) {
-            this.showMessage(`Ошибка загрузки: ${error.message}`, 'error');
-        } finally {
-            this.hideLoader();
-        }
-    }
-
-    async checkComponentActivity(componentId, componentType) {
-        try {
-            const response = await fetch(`api/admin.php?action=check_component_activity&id=${componentId}&type=${componentType}`);
-            if (!response.ok) {
-                return true;
-            }
-            
-            const data = await response.json();
-            if (data.success) {
-                return data.is_active !== false; 
-            }
-            return false;
-        } catch (error) {
-            return false;
-        }
-    }
-
-    async getComponentFromDatabase(componentId, componentType) {
-        try {
-            const tableMap = {
-                'cpus': 'cpus',
-                'motherboards': 'motherboards',
-                'rams': 'rams',
-                'gpus': 'gpus',
-                'storages': 'storages',
-                'psus': 'psus',
-                'cases': 'cases',
-                'coolers': 'coolers'
-            };
-            
-            const tableName = tableMap[componentType];
-            if (!tableName) return null;
-            
-            const response = await fetch(`api/admin.php?action=get_component_single&id=${componentId}&type=${componentType}`);
-            const data = await response.json();
-            
-            if (data.success && data.component) {
-                return this.normal_component(data.component, componentType);
-            }
-            
-            return null;
-        } catch (error) {
-            return null;
-        }
-    }
-
-    normal_component(component, componentType) {
-        return {
-            id: component.id,
-            name: component.name || 'Компонент',
-            price: component.price || 0,
-            category: componentType.slice(0, -1), 
-            image: component.image || '',
-            socket: component.socket || '',
-            memory_type: component.memory_type || '',
-            wattage: component.wattage || 0,
-            capacity: component.capacity || 0,
-            speed: component.speed || '',
-            tdp: component.tdp || 0,
-            type: component.type || '',
-            is_active: component.is_active !== undefined ? component.is_active : 1, 
-            
-            critical_specs: this.parseJSONField(component.critical_specs, []),
-            compatibility_flags: this.parseJSONField(component.compatibility_flags, []),
-            specs: this.parseJSONField(component.specs, [])
-        };
-    }
-
-    parseJSONField(field, defaultValue) {
-        if (!field) return defaultValue;
-        
-        if (typeof field === 'string') {
-            try {
-                return JSON.parse(field);
-            } catch (e) {
-                return [field];
-            }
-        } else if (Array.isArray(field)) {
-            return field;
-        }
-        
-        return defaultValue;
-    }
-
-    async deleteSavedBuild(buildId) {
-        try {
-            const response = await fetch('api/builds.php?action=delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: buildId })
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                const card = document.getElementById(`build-${buildId}`);
-                if (card) card.remove();
-                
-                const grid = document.getElementById('favorites-grid');
-                if (grid.children.length === 0) {
-                    this.loadUserBuilds(); 
-                }
-                
-                this.showMessage('Сборка удалена', 'success');
-            } else {
-                throw new Error(data.message || 'Ошибка удаления');
-            }
-        } catch (error) {
-            this.showMessage(`${error.message}`, 'error');
-        }
-    }
-
-    get_Status(componentType, componentData) {
-        if (!componentData) return 'unknown';
-
-        if (componentData._pendingActivityCheck) {
-            delete componentData._pendingActivityCheck;
-            
-            const checkActivity = async () => {
-                try {
-                    const isActive = await this.checkComponentActivity(componentData.id, componentType);
-                    if (!isActive) {
-                        componentData.is_active = 0;
-                        setTimeout(() => {
-                            this.updateComponentStatuses();
-                        }, 100);
-                    } else {
-                        componentData.is_active = 1;
-                    }
-                } catch (e) {
-                    componentData.is_active = 1;
-                }
-            };
-            checkActivity();
-            
-            return 'success';
-        }
-        
-
-        if (componentData.is_active !== undefined && Number(componentData.is_active) === 0) {
-            return 'inactive';
-        }
-        
-        if (!this.compatibilityStatus) return 'success';
-            
-        if (this.compatibilityStatus.isValid && !this.compatibilityStatus.hasWarnings) {
-            return 'success';
-        }
-        
-        const componentName = componentData?.name || '';
-        
-        for (const error of this.compatibilityStatus.errors || []) {
-            const errorContainsName = componentName && error.message.includes(componentName);
-            
-            let errorContainsType = false;
-            if (componentType === 'motherboards') {
-                errorContainsType = error.message.includes('плат') || 
-                                error.message.includes('материнск'); 
-            } else {
-                errorContainsType = error.message.includes(this.getComponentTypeName(componentType));
-            }
-            
-
-            const isSocketError = (componentType === 'cpus' || componentType === 'motherboards' || componentType === 'coolers') && 
-                                error.message.includes('сокет');
-            
-            const isRamError = componentType === 'rams' && 
-                            error.message.includes('память') && 
-                            error.message.includes('не совместима');
-            
-            if (errorContainsName || errorContainsType || isSocketError || isRamError) {
-                const isCoolerCompatibilityWarning = componentType === 'coolers' && 
-                                                    (error.message.includes('возможно не совместим') ||
-                                                    error.message.includes('проверьте совместимость'));
-                
-                if (isCoolerCompatibilityWarning) {
-                    return 'warning';
-                }
-                return 'error';
-            }
-        }
-        
-
-        for (const warning of this.compatibilityStatus.warnings || []) {
-            const warningText = warning.message.toLowerCase();
-            const compName = componentName.toLowerCase();
-            
-            let warningContainsType = false;
-            if (componentType === 'motherboards') {
-                warningContainsType = warningText.includes('плат') || 
-                                    warningText.includes('материнск');
-            } else if (componentType === 'rams') {
-                warningContainsType = warningText.includes('память') || 
-                                    warningText.includes('озу') ||
-                                    warningText.includes('ddr');
-            } else if (componentType === 'cpus') {
-                warningContainsType = warningText.includes('процессор') || 
-                                    warningText.includes('cpu');
-            } else {
-                warningContainsType = warningText.includes(this.getComponentTypeName(componentType).toLowerCase());
-            }
-            
-            if (warningText.includes(compName) || warningContainsType) {
-                return 'warning';
-            }
-        }
-        
-
-        if (!this.compatibilityStatus.isValid && this.compatibilityStatus.errors?.length > 0) {
-            const hasErrorsForThisComponent = this.compatibilityStatus.errors.some(error => {
-                const errorText = error.message.toLowerCase();
-                const compName = componentName.toLowerCase();
-                
-                let errorContainsType = false;
-                if (componentType === 'motherboards') {
-                    errorContainsType = errorText.includes('плат') || 
-                                    errorText.includes('материнск');
-                } else {
-                    errorContainsType = errorText.includes(this.getComponentTypeName(componentType).toLowerCase());
-                }
-                
-                return error.component1 === componentType || 
-                    error.component2 === componentType ||
-                    errorText.includes(compName) ||
-                    errorContainsType;
-            });
-            
-            if (!hasErrorsForThisComponent) {
-                return 'success';
-            }
-        }
-        
-        return !this.compatibilityStatus.isValid ? 'error' : 'success';
-    }
-
-    getComponentImagePath(component, componentType) {
-        
-        if (!component) {
-            return this.getComponentIconPath ? this.getComponentIconPath(componentType) : 'source/icons/default_component.png';
-        }
-        
-        const componentData = component.component || component;
-        
-        if (!componentData.image) {
-            return this.getComponentIconPath ? this.getComponentIconPath(componentType) : 'source/icons/default_component.png';
-        }
-        
-        let imagePath = componentData.image.toString().trim();
-        
-        imagePath = imagePath.replace(/^\.\//, '').replace(/^\/+/, '');
-        
-        if (imagePath.startsWith('http://') || imagePath.startsWith('https://') || 
-            imagePath.startsWith('data:') || imagePath.startsWith('blob:')) {
-            return imagePath;
-        }
-        
-        if (imagePath.startsWith('source/') || imagePath.startsWith('images/')) {
-            return imagePath;
-        }
-        
-        let category = componentData.category || '';
-        if (!category) {
-            const typeMap = {
-                'cpus': 'cpu',
-                'motherboards': 'motherboard',
-                'rams': 'ram', 
-                'gpus': 'gpu',
-                'storages': 'storage',
-                'psus': 'psu',
-                'coolers': 'cooler',
-                'cases': 'case'
-            };
-            category = typeMap[componentType] || 'components';
-        }
-        
-        const possiblePaths = [
-            `source/${category}s/${imagePath}`,  
-            `source/${category}/${imagePath}`,
-            `source/images/${category}/${imagePath}`,
-            `images/${category}/${imagePath}`,
-            `source/${imagePath}`,
-            `images/${imagePath}`,
-            `source/icons/${category}_icon.png`,
-            imagePath 
-        ];
-           
-        return possiblePaths[0];
-    }
-
-    get_error_compability(componentType, component) {
-        if (!component) return 'unknown';
-        
-        const compatibility = this.checkComponentCompatibility(componentType, component);
-        
-        if (compatibility.compatible) {
-            return 'success';
-        } else {
-            return 'warning';
-        }
-    }
-
-
-    updateComponentStatuses() {
-        const componentTypes = ['cpus', 'motherboards', 'rams', 'gpus', 'psus', 'cases', 'coolers'];
-        
-        componentTypes.forEach(type => {
-            const component = this.currentBuild[type];
-            if (component) {
-                const container = document.querySelector(`[data-component-type="${type}"]`);
-                if (container) {
-                    const selectedView = container.querySelector('.selected-component-view');
-                    if (selectedView) {
-                        const status = this.get_Status(type, component);
-                        selectedView.className = `selected-component-view ${status}`;
-                        
-                        const statusElement = selectedView.querySelector('.selected-component-status');
-                        if (statusElement) {
-                            statusElement.textContent = this.get_icon(status);
-                            statusElement.title = this.get_text(status);
-                        }
-                    }
-                }
-            }
-        });
-        
-        if (Array.isArray(this.currentBuild.storages)) {
-            this.currentBuild.storages.forEach((storage, index) => {
-                const container = document.querySelector('[data-component-type="storages"]');
-                if (container) {
-                    const storageViews = container.querySelectorAll('.selected-component-view');
-                    if (storageViews[index]) {
-                        const status = this.get_Status('storages', storage);
-                        storageViews[index].className = `selected-component-view ${status}`;
-                        
-                        const statusElement = storageViews[index].querySelector('.selected-component-status');
-                        if (statusElement) {
-                            statusElement.textContent = this. get_icon(status);
-                            statusElement.title = this.get_text(status);
-                        }
-                    }
-                }
-            });
-        }
-    }
-
-    get_icon(status) {
-        switch(status) {
-            case 'success': return '✓';
-            case 'warning': return '⚠';
-            case 'error': return '✗';
-            case 'inactive': return '⚠'
-            default: return '?';
-        }
-    }
-
-    get_text(status) {
-        switch(status) {
-            case 'success': return 'Компонент совместим с остальной сборкой';
-            case 'warning': return 'Есть предупреждение по совместимости. Проверьте спецификации.';
-            case 'error': return 'Компонент несовместим с другими компонентами сборки';
-            case 'inactive': return 'Компонент не активен. Возможно, он удалён или временно недоступен.';
-            default: return 'Статус совместимости не определен';
-        }
-    }
-
-    
-    formatPrice(price) {
-        if (!price && price !== 0) return '0';
-        return new Intl.NumberFormat('ru-RU').format(price);
-    }
-
-    updateSaveButtonState() {
-        const saveBtn = document.getElementById('save-build-btn'); 
-        if (!saveBtn) return;
-
-        const hasCPU = !!this.currentBuild.cpus;
-        const hasMB = !!this.currentBuild.motherboards;
-        const hasRAM = !!this.currentBuild.rams;
-
-        const isReady = hasCPU && hasMB && hasRAM;
-
-        if (isReady) {
-            saveBtn.disabled = false;
-            saveBtn.classList.remove('btn-disabled'); 
-            saveBtn.style.opacity = '1';
-            saveBtn.style.cursor = 'pointer';
-        } else {
-            saveBtn.disabled = true;
-            saveBtn.classList.add('btn-disabled');
-            saveBtn.style.opacity = '0.5';
-            saveBtn.style.cursor = 'not-allowed';
-        }
-    }
-
-    async handleAuthSubmit(e) {
-        e.preventDefault();
-        
-        const username = document.getElementById('username').value.trim();
-        const password = document.getElementById('password').value;
-        const email = document.getElementById('email') ? document.getElementById('email').value.trim() : '';
-        const authMessage = document.getElementById('auth-message');
-        const authLoading = document.getElementById('auth-loading');
-        const isRegisterMode = document.getElementById('register-fields') && 
-                            !document.getElementById('register-fields').classList.contains('hidden');
-
-        if (!username || !password) {
-            this.showAuthMessage('Заполните поля', 'error');
-            return;
-        }
-        
-        if (isRegisterMode && !email) {
-            this.showAuthMessage('Введите email', 'error');
-            return;
-        }
-
-        try {
-            if (authLoading) authLoading.classList.remove('hidden');
-            if (authMessage) {
-                authMessage.textContent = '';
-                authMessage.className = 'auth-message';
-            }
-
-            let user;
-            
-            if (isRegisterMode) {
-                user = await this.authManager.register(username, email, password);
-                this.showAuthMessage('Регистрация успешна! Добро пожаловать!', 'success');
-            } else {
-                user = await this.authManager.login(username, password);
-                this.showAuthMessage(`Добро пожаловать, ${user.username}!`, 'success');
-            }
-
-            setTimeout(() => {
-                this.authManager.hideAuthModal();
-                if (authLoading) authLoading.classList.add('hidden');
-            }, 1500);
-
-        } catch (error) {
-            if (authLoading) authLoading.classList.add('hidden');
-            this.showAuthMessage(error.message, 'error');
-        }
-    }
-
-    showAuthMessage(message, type = 'info') {
-        const authMessage = document.getElementById('auth-message');
-        if (authMessage) {
-            authMessage.textContent = message;
-            authMessage.className = `auth-message ${type}`;
-            
-            if (type === 'success') {
-                setTimeout(() => {
-                    authMessage.textContent = '';
-                    authMessage.className = 'auth-message';
-                }, 3000);
-            }
-        }
-    }
-
-    saveBuildToStorage() {
-        localStorage.setItem('currentBuild', JSON.stringify(this.currentBuild));
-    }
-
-    loadBuildFromStorage() {
-        const saved = localStorage.getItem('currentBuild');
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);   
-                if (parsed.null !== undefined) {
-                    delete parsed.null;
-                }
-                
-                Object.keys(parsed).forEach(key => {
-                    if (parsed[key]) {
-                        if (key === 'storages' && Array.isArray(parsed[key])) {
-                            parsed[key] = parsed[key].map(item => {
-                                const componentData = this.extractComponentData(item);
-                                componentData._pendingActivityCheck = true;
-                                componentData.is_active = 1; 
-                                return componentData;
-                            });
-                        } else if (key !== 'storages') {
-                            const componentData = this.extractComponentData(parsed[key]);
-                            componentData._pendingActivityCheck = true;
-                            componentData.is_active = 1; 
-                            parsed[key] = componentData;
-                        }
-                    }
+            const mb_slots = _extract_mem_slots(mb);
+            if (mb_slots && ram.modules && parseInt(ram.modules) > mb_slots) {
+                _status.errors.push({
+                    component1: 'rams', component2: 'motherboards',
+                    message: `Недостаточно слотов: выбрано ${ram.modules} модуля(ей) на ${mb_slots} слота(ов)`
                 });
-                
-                this.currentBuild = parsed;
-                
-            } catch (error) {
-                this.currentBuild = this.getEmptyBuild();
             }
         }
-    }
 
-    clearBuildFromStorage() {
-        localStorage.removeItem('currentBuild');
-    }
-
-    showLoader() {
-        const loader = document.getElementById('global-loader');
-        if (loader) {
-            loader.classList.remove('hidden');
-        }
-    }
-
-    hideLoader() {
-        const loader = document.getElementById('global-loader');
-        if (loader) {
-            loader.classList.add('hidden');
-        }
-    }
-
-    showMessage(message, type = 'info') {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${type}`;
-        messageDiv.textContent = message;
-        messageDiv.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            border-radius: 5px;
-            color: white;
-            z-index: 10000;
-            background: ${type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#007bff'};
-        `;
-        
-        document.body.appendChild(messageDiv);
-        
-        setTimeout(() => {
-            if (messageDiv.parentNode) {
-                messageDiv.parentNode.removeChild(messageDiv);
+        if (mb && storages.length > 0) {
+            const m2 = storages.filter(s => s.type && (s.type.toUpperCase().includes('M.2') || s.type.toUpperCase().includes('NVME')));
+            if (m2.length > 0) {
+                const slots = _extract_m2(mb);
+                if (m2.length > slots) {
+                    _status.errors.push({
+                        component1: 'storages', component2: 'motherboards',
+                        message: `Плата имеет ${slots} M.2 слот(а), выбрано ${m2.length} M.2 накопитель(ей)`
+                    });
+                }
             }
-        }, 3000);
-    }
-
-    getCurrentBuild() {
-        return this.currentBuild;
-    }
-
-    getCompatibilityStatus() {
-        return this.compatibilityStatus;
-    }
-
-    getSelectedComponent(componentType) {
-        return this.currentBuild[componentType];
-    }
-
-    getEmptyBuild() {
-        return {
-            cpus: null,
-            motherboards: null,
-            rams: null,
-            gpus: null,
-            storages: [],
-            psus: null,
-            cases: null,
-            coolers: null
-        };
-    }
-
-    getComponentTypeName(type) {
-        const names = {
-            'cpus': 'процессор',
-            'motherboards': 'материнскую плату', 
-            'rams': 'оперативную память',
-            'gpus': 'видеокарту',
-            'storages': 'накопитель',
-            'psus': 'блок питания',
-            'cases': 'корпус',
-            'coolers': 'охлаждение'
-        };
-        return names[type] || type;
-    }
-
-    getCategoryFolder(component, componentType) {
-        if (component && component.category) {
-            const categoryMap = {
-                'cpu': 'cpus', 'процессор': 'cpus',
-                'motherboard': 'motherboards', 'материнская плата': 'motherboards',
-                'ram': 'rams', 'оперативная память': 'rams',
-                'gpu': 'gpus', 'видеокарта': 'gpus',
-                'storage': 'storages', 'накопитель': 'storages',
-                'ssd': 'storages', 'hdd': 'storages',
-                'psu': 'psus', 'блок питания': 'psus',
-                'case': 'cases', 'корпус': 'cases',
-                'cooler': 'coolers', 'охлаждение': 'coolers'
-            };
-            return categoryMap[component.category.toLowerCase()] || component.category;
-        }
-        
-        return componentType || 'components';
-    }
-
-    async saveBuildToServer(e) {
-        if (e) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
+            const sata = storages.filter(s => !s.type || (!s.type.toUpperCase().includes('M.2') && !s.type.toUpperCase().includes('NVME')));
+            if (sata.length > 0) {
+                const ports = _extract_sata(mb);
+                if (sata.length > ports) {
+                    _status.errors.push({
+                        component1: 'storages', component2: 'motherboards',
+                        message: `Плата имеет ${ports} SATA порт(а), выбрано ${sata.length} SATA накопитель(ей)`
+                    });
+                }
+            }
         }
 
-        if (!this.authManager.currentUser) {
-            alert("Пожалуйста, войдите в систему");
+        if (cooler && cpu) {
+            if (cpu.socket && cooler.socket_compatibility) {
+                const sockets = cooler.socket_compatibility.toUpperCase().split(/[,|]/).map(s => s.trim());
+                if (!sockets.includes(cpu.socket.toUpperCase())) {
+                    _status.warnings_list.push({
+                        component1: 'coolers', component2: 'cpus',
+                        message: `Кулер может не поддерживать сокет ${cpu.socket}. Проверьте совместимость.`
+                    });
+                }
+            }
+            if (cpu.tdp && cooler.tdp && parseInt(cooler.tdp) < parseInt(cpu.tdp)) {
+                _status.warnings_list.push({
+                    component1: 'coolers', component2: 'cpus',
+                    message: `TDP кулера (${cooler.tdp}W) недостаточно для процессора (${cpu.tdp}W)`
+                });
+            }
+        }
+
+        if (pc_case && mb && mb.form_factor) {
+            const mb_ff = mb.form_factor.toUpperCase();
+            const case_support = pc_case.supported_motherboards || '';
+            const case_ffs = case_support.toUpperCase().split(/[,|]/).map(f => f.trim());
+            if (case_ffs.length > 0) {
+                let ok = false;
+                for (const f of case_ffs) {
+                    if (f === mb_ff || (FORM_FACTOR_HIERARCHY[f] && FORM_FACTOR_HIERARCHY[f].includes(mb_ff))) {
+                        ok = true; break;
+                    }
+                }
+                if (!ok) {
+                    _status.warnings_list.push({
+                        component1: 'cases', component2: 'motherboards',
+                        message: `Корпус может не поддерживать плату ${mb.form_factor}. Проверьте спецификации.`
+                    });
+                }
+            }
+        }
+
+        if (gpu && pc_case && pc_case.max_gpu_length) {
+            const gpu_length = parseInt(gpu.length_mm) || 
+                            parseInt(gpu.card_length) || 
+                            parseInt(gpu.dimensions?.length) ||
+                            parseInt(gpu.length);
+                            
+            if (gpu_length && gpu_length > parseInt(pc_case.max_gpu_length)) {
+                _status.warnings_list.push({
+                    component1: 'gpus', component2: 'cases',
+                    message: `Видеокарта (${gpu_length}мм) может не поместиться в корпус (макс. ${pc_case.max_gpu_length}мм)`
+                });
+            }
+        }
+
+        if (cooler && pc_case && pc_case.max_cpu_cooler_height) {
+            const cooler_height = parseInt(cooler.height) || 
+                                parseInt(cooler.cooler_height) ||
+                                parseInt(cooler.dimensions?.height) || 0;
+                                
+            if (cooler_height && cooler_height > parseInt(pc_case.max_cpu_cooler_height)) {
+                _status.warnings_list.push({
+                    component1: 'coolers', component2: 'cases',
+                    message: `Кулер (${cooler_height}мм) может не поместиться в корпус (макс. ${pc_case.max_cpu_cooler_height}мм)`
+                });
+            }
+        }
+
+        const total_p = _calc_power();
+        if (psu && total_p > 0 && psu.wattage) {
+            const pw = parseInt(psu.wattage);
+            if (pw < total_p) {
+                _status.errors.push({
+                    component1: 'psus', component2: 'system',
+                    message: `Мощность БП (${pw}W) недостаточна для сборки (требуется минимум ${total_p}W)`
+                });
+            } else {
+                const rec = Math.ceil(total_p * 1.2);
+                if (pw < rec) {
+                    _status.warnings_list.push({
+                        component1: 'psus', component2: 'system',
+                        message: `Рекомендуется БП мощностью от ${rec}W для запаса`
+                    });
+                }
+            }
+        }
+
+        _status.valid = _status.errors.length === 0;
+        _status.warnings = _status.warnings_list.length > 0;
+        _render_compat();
+        _update_save_btn();
+    };
+
+    const _render_compat = () => {
+        const bar = document.getElementById('progress-bar');
+        const text = document.getElementById('compatibility-text');
+        const count = document.getElementById('compatibility-count');
+        if (!bar || !text || !count) return;
+
+        count.innerHTML = `${_status.selected}<span>/${_status.total}</span>`;
+        bar.style.width = `${_status.progress}%`;
+        bar.className = 'progress-fill';
+        if (!_status.valid) bar.classList.add('bg-error');
+        else if (_status.warnings) bar.classList.add('bg-warning');
+        else if (_status.selected > 0) bar.classList.add('bg-success');
+
+        if (_status.selected === 0) {
+            text.innerHTML = '<div class="comp-hint">Добавьте компоненты, чтобы проверить совместимость</div>';
             return;
         }
 
-        const hasComponents = Object.values(this.currentBuild).some(val => {
-            if (Array.isArray(val)) {
-                return val.length > 0;
-            }
-            return val !== null;
+        let html = '<div class="comp-alert">';
+        if (_status.errors.length > 0) {
+            html += '<div class="alert-group error"><span class="alert-title">Критические ошибки</span><ul class="alert-list">';
+            _status.errors.forEach(e => { html += `<li class="alert-item">${e.message}</li>`; });
+            html += '</ul></div>';
+        }
+        if (_status.warnings_list.length > 0) {
+            html += '<div class="alert-group warning"><span class="alert-title">Предупреждения</span><ul class="alert-list">';
+            _status.warnings_list.forEach(w => { html += `<li class="alert-item">${w.message}</li>`; });
+            html += '</ul></div>';
+        }
+        if (_status.valid && !_status.warnings && _status.selected > 0) {
+            html += '<div class="alert-group success">Конфигурация полностью совместима</div>';
+        }
+        html += '</div>';
+        text.innerHTML = html;
+    };
+
+    const _update_save_btn = () => {
+        const btn = document.getElementById('save-build-btn');
+        if (!btn) return;
+        const ready = !!_build.cpus && !!_build.motherboards && !!_build.rams;
+        btn.disabled = !ready;
+        btn.classList.toggle('btn-disabled', !ready);
+        btn.style.opacity = ready ? '1' : '0.5';
+        btn.style.cursor = ready ? 'pointer' : 'not-allowed';
+    };
+
+    const _open_selection = (type) => {
+        if (window.ModalManager?.showComponentModal) {
+            const filters = _data?.getCompatibilityFilters ? _data.getCompatibilityFilters(_build) : {};
+            window.ModalManager.showComponentModal(type, filters);
+        } else {
+            _show_message('Менеджер не загружен', 'error');
+        }
+    };
+
+    const _select = (type, data) => {
+        if (!type) {
+            const map = { 1: 'cpus', 2: 'motherboards', 3: 'rams', 4: 'gpus', 5: 'storages', 6: 'psus', 7: 'cases', 8: 'coolers' };
+            type = map[data.category_id] || '';
+        }
+        if (!type) { _show_message('Тип не определён', 'error'); return; }
+
+        const c = _extract(data);
+        if (!c) { _show_message('Неверный формат', 'error'); return; }
+        if (!c.id) c.id = Date.now();
+        if (!c.name) c.name = `Компонент ${type}`;
+
+        if (type === 'storages') {
+            if (!_build.storages) _build.storages = [];
+            _build.storages.push(c);
+        } else {
+            _build[type] = c;
+        }
+
+        if (_build.null !== undefined) delete _build.null;
+        _render_cards();
+        _calc_power();
+        _save_storage();
+        _show_message(`"${c.name}" добавлен в сборку`, 'success');
+    };
+
+    const _remove = (type, index = null) => {
+        if (!confirm('Убрать компонент из сборки?')) return;
+        if (type === 'storages' && index !== null) {
+            if (Array.isArray(_build.storages)) _build.storages.splice(index, 1);
+        } else {
+            _build[type] = null;
+        }
+        _status.errors = [];
+        _status.warnings_list = [];
+        _status.valid = false;
+        _status.warnings = false;
+
+        _render_cards();
+        _calc_power();
+        _check_compat();
+        _save_storage();
+        _show_message('Компонент удалён из сборки', 'success');
+    };
+
+    const _reset = () => {
+        if (!confirm('Вы уверены, что хотите сбросить текущую сборку?')) return;
+        Object.assign(_build, {
+            cpus: null, motherboards: null, rams: null, gpus: null,
+            storages: [], psus: null, cases: null, coolers: null
         });
+        _render_cards();
+        _check_compat();
+        _clear_storage();
+        _calc_power();
+        _show_message('Сборка сброшена', 'success');
+    };
 
-        if (!hasComponents) {
-            alert("Сборка пуста! Выберите хотя бы один компонент.");
+    const _save_server = async (event) => {
+        if (event) { event.preventDefault(); event.stopImmediatePropagation(); }
+
+        if (!_auth || !_auth.isLogged()) {
+            _auth?.showModal();
             return;
         }
 
-        if (this.isSaving) return;
-        this.isSaving = true;
-        this.showLoader();
+        const has = Object.values(_build).some(v => Array.isArray(v) ? v.length > 0 : v !== null);
+        if (!has) { alert('Сборка пуста! Выберите хотя бы один компонент.'); return; }
+        if (_saving) return;
+        _saving = true;
+        _show_loader();
 
         try {
-            const components = {};
-            
-            for (const [type, component] of Object.entries(this.currentBuild)) {
-                if (!component || (Array.isArray(component) && component.length === 0)) {
-                    continue;
-                }
-                
-                if (type === 'storages' && Array.isArray(component)) {
-                    components[type] = component.map(item => ({
-                        id: item.id || 0,
-                        name: item.name || 'Накопитель',
-                        price: item.price || 0,
-                        image: item.image || '' 
-                    }));
-                } else if (component) {
-                    components[type] = {
-                        id: component.id || 0,
-                        name: component.name || 'Компонент',
-                        price: component.price || 0,
-                        image: component.image || '' 
-                    };
+            const comps = {};
+            for (const [t, c] of Object.entries(_build)) {
+                if (!c || (Array.isArray(c) && c.length === 0)) continue;
+                if (t === 'storages' && Array.isArray(c)) {
+                    comps[t] = c.map(i => ({ id: i.id || 0, name: i.name || 'Накопитель', price: i.price || 0, image: i.image || '' }));
+                } else if (c) {
+                    comps[t] = { id: c.id || 0, name: c.name || 'Компонент', price: c.price || 0, image: c.image || '' };
                 }
             }
 
-            const buildName = prompt(
-                "Введите название сборки:", 
-                "Моя сборка " + new Date().toLocaleDateString('ru-RU')
-            ) || "Моя сборка " + new Date().toLocaleDateString('ru-RU');
+            const name = prompt('Введите название сборки:', `Моя сборка ${new Date().toLocaleDateString('ru-RU')}`);
+            if (name === null) { _saving = false; _hide_loader(); return; }
 
-        
-            const buildData = {
-                name: buildName,
-                total_price: this.calculateTotalPrice(),
-                components: components,  
-                user_id: this.authManager.currentUser.id,
-                username: this.authManager.currentUser.username,
-                user_role: this.authManager.currentUser.role
-            };
-
-            const response = await fetch(`api/builds.php?action=save&user_id=${this.authManager.currentUser.id}`, {
+            const user = _auth.getUser();
+            const res = await fetch(`api/builds.php?action=save&user_id=${user.id}`, {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    name: buildName,
-                    total_price: this.calculateTotalPrice(),
-                    components: components
-                })
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ name, total_price: _total_price(), components: comps })
             });
 
-            const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.message || "Ошибка сервера");
-            }
-
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Ошибка сервера');
             if (data.success) {
-                alert("Сборка успешно сохранена!");
-                if (!document.getElementById('favorites-modal').classList.contains('hidden')) {
-                    await this.loadUserBuilds();
-                }
+                alert('Сборка успешно сохранена!');
             } else {
                 throw new Error(data.message);
             }
-            
-        } catch (error) {
-            alert(`Ошибка сохранения: ${error.message}`);
+        } catch (e) {
+            alert(`Ошибка сохранения: ${e.message}`);
         } finally {
-            this.isSaving = false;
-            this.hideLoader();
+            _saving = false;
+            _hide_loader();
         }
-    }
+    };
 
-    checkComponentCompatibility(componentType, component) {
-        if (!component) return { compatible: true, message: '' };
-        
-        const cpu = this.currentBuild.cpus;
-        const mb = this.currentBuild.motherboards;
-        const cooler = this.currentBuild.coolers;
-        const pcCase = this.currentBuild.cases;
-        const rams = this.currentBuild.rams;
-        
-        if (componentType === 'motherboards') {
-            const cpu = this.currentBuild.cpus;
-            if (cpu && component.socket && cpu.socket) {
-                if (component.socket !== cpu.socket) {
-                    return {
-                        compatible: false,
-                        message: `Сокет материнской платы (${component.socket}) не подходит для процессора (${cpu.socket})`
-                    };
-                }
+    const _fetch_component = async (id, type) => {
+        try {
+            const res = await fetch(`api/components.php?id=${id}&category=${type}`);
+            const data = await res.json();
+            if (data.success && data.component) {
+                const c = data.component;
+                if (c.component_id) c.id = c.component_id;
+                return _normalize(c, type);
+            }
+            return null;
+        } catch (e) { return null; }
+    };
+
+    const _load_saved = async (build_id) => {
+        _show_loader();
+        try {
+            const res = await fetch('api/builds.php?action=get_builds');
+            const data = await res.json();
+
+            let build = null;
+            if (data.builds) build = data.builds.find(b => b.id == build_id);
+            
+            if (!build) {
+                const pub_res = await fetch('api/builds.php?action=get_public');
+                const pub_data = await pub_res.json();
+                if (pub_data.builds) build = pub_data.builds.find(b => b.id == build_id);
+            }
+            
+            if (!build) {
+                alert('Сборка не найдена');
+                _hide_loader();
+                return;
+            }
+            
+            if (!confirm(`Загрузить сборку "${build.name}"?`)) {
+                _hide_loader();
+                return;
             }
 
-            const ram = this.currentBuild.rams;
-            if (ram && component.memory_type) {
-                const mbMemoryType = component.memory_type.toUpperCase();
-                const ramType = (ram.type || ram.memory_type || "").toUpperCase();
+            Object.assign(_build, {
+                cpus: null, motherboards: null, rams: null, gpus: null,
+                storages: [], psus: null, cases: null, coolers: null
+            });
 
-                if (ramType) {
-                    const mbIsDDR4 = mbMemoryType.includes('DDR4');
-                    const mbIsDDR5 = mbMemoryType.includes('DDR5');
-                    const ramIsDDR4 = ramType.includes('DDR4');
-                    const ramIsDDR5 = ramType.includes('DDR5');
-
-                    if ((mbIsDDR4 && ramIsDDR5) || (mbIsDDR5 && ramIsDDR4)) {
-                        return {
-                            compatible: false,
-                            message: `Выбранная плата поддерживает ${mbMemoryType}, а у вас в сборке ${ramType}.`
-                        };
-                    }
-                }
+            let comps = build.components || {};
+            if (!Object.keys(comps).length && build.compatibility_data) {
+                try { comps = JSON.parse(build.compatibility_data); } catch (e) { comps = {}; }
             }
 
-            if (ram && ram.modules && component.memorySlots) {
-                if (parseInt(ram.modules) > parseInt(component.memorySlots)) {
-                    return {
-                        compatible: false,
-                        message: `В этой плате ${component.memorySlots} слота(ов), что меньше чем ${ram.modules} модуля(ей) в выбранной ОЗУ.`
-                    };
-                }
-            }
-            return { compatible: true, message: '' };
-        }
-        
-        if (componentType === 'rams') {
-                const mb = this.currentBuild.motherboards;
-                if (mb && mb.memory_type) {
-                    const mbType = mb.memory_type.toUpperCase();
-                    const ramType = (component.type || component.memory_type || "").toUpperCase();
-                    
-                    const mbIsDDR4 = mbType.includes('DDR4');
-                    const mbIsDDR5 = mbType.includes('DDR5');
-                    const ramIsDDR4 = ramType.includes('DDR4');
-                    const ramIsDDR5 = ramType.includes('DDR5');
-
-                    if (mb && mb.memorySlots && component.modules) {
-                        if (parseInt(component.modules) > parseInt(mb.memorySlots)) {
-                            return {
-                                compatible: false,
-                                message: `Недостаточно слотов: в ОЗУ ${component.modules} модуля(ей), а на плате всего ${mb.memorySlots} слота(ов).`
-                            };
+            const categories = ['cpus', 'motherboards', 'rams', 'gpus', 'psus', 'cases', 'coolers'];
+            
+            for (const type of categories) {
+                const item = comps[type];
+                if (item && item.id) {
+                    try {
+                        const compRes = await fetch(`api/components.php?id=${item.id}`);
+                        const compData = await compRes.json();
+                        if (compData.success && compData.component) {
+                            _build[type] = compData.component;
+                        } else {
+                            _build[type] = item; 
                         }
-                    }
+                    } catch (e) { _build[type] = item; }
+                }
+            }
 
-                    if ((mbIsDDR4 && ramIsDDR5) || (mbIsDDR5 && ramIsDDR4)) {
-                        return {
-                            compatible: false,
-                            message: `Память ${ramType} не подходит к разъемам ${mbType} на материнской плате.`
-                        };
-                    }
-                }
-                return { compatible: true, message: '' };
+            if (Array.isArray(comps.storages)) {
+                _build.storages = await Promise.all(comps.storages.map(async (s) => {
+                    try {
+                        const compRes = await fetch(`api/components.php?id=${s.id}`);
+                        const compData = await compRes.json();
+                        return compData.success ? compData.component : s;
+                    } catch (e) { return s; }
+                }));
             }
-        
-        if (componentType === 'coolers') {
-            if (cpu && cpu.socket && component.socket) {
-                const cpuSocket = cpu.socket.toUpperCase();
-                let coolerSocket = component.socket;
-                
-                let coolerSockets = [];
-                if (typeof coolerSocket === 'string') {
-                    coolerSockets = coolerSocket.split(/[,|]/).map(s => s.trim().toUpperCase());
-                } else if (Array.isArray(coolerSocket)) {
-                    coolerSockets = coolerSocket.map(s => String(s).toUpperCase());
-                } else {
-                    coolerSockets = [String(coolerSocket).toUpperCase()];
-                }
-                
-                const isCompatible = coolerSockets.some(socket => 
-                    socket === cpuSocket || 
-                    socket.includes(cpuSocket) || 
-                    cpuSocket.includes(socket)
-                );
-                
-                if (!isCompatible) {
-                    return {
-                        compatible: false,
-                        message: `Кулер может не поддерживать сокет ${cpu.socket}. Проверьте совместимость.`
-                    };
-                }
-            }
-            return { compatible: true, message: '' };
+
+            _save_storage();
+            _render_cards();
+            _calc_power(); 
+            _check_compat();
+            
+        } catch (e) {
+            console.error(e);
+            _show_message('Ошибка загрузки сборки', 'error');
         }
-        
-        if (componentType === 'cases') {
-            if (mb && mb.form_factor && component.supported_form_factors) {
-                const mbFormFactor = mb.form_factor.toUpperCase();
-                let caseFormFactors = component.supported_form_factors;
-                
-                if (typeof caseFormFactors === 'string') {
-                    caseFormFactors = caseFormFactors.split(/[,|]/).map(f => f.trim().toUpperCase());
-                } else if (Array.isArray(caseFormFactors)) {
-                    caseFormFactors = caseFormFactors.map(f => String(f).toUpperCase());
-                } else {
-                    caseFormFactors = [String(caseFormFactors).toUpperCase()];
-                }
-                
-                const isCompatible = caseFormFactors.some(factor => {
-                    const factorUpper = factor.toUpperCase();
-                    if (factorUpper === mbFormFactor) return true;
-                    
-                    const compatibility_erarxiya = {
-                        'E-ATX': ['E-ATX', 'ATX', 'MICRO-ATX', 'MINI-ITX'],
-                        'ATX': ['ATX', 'MICRO-ATX', 'MINI-ITX'],
-                        'MICRO-ATX': ['MICRO-ATX', 'MINI-ITX'],
-                        'MINI-ITX': ['MINI-ITX']
-                    };
-                    
-                    if (compatibility_erarxiya[factorUpper]) {
-                        return compatibility_erarxiya[factorUpper].includes(mbFormFactor);
-                    }
-                    
-                    return false;
+        _hide_loader();
+    };
+    const _show_component_details = (type, id) => {
+        window.location.href = `component.html?id=${id}&type=${type}`;
+    };
+
+    const _get_build_icons = (comps) => {
+        const icon_types = [
+            { key: 'cpus', folder: 'cpus', icon: 'cpu_icon.png' },
+            { key: 'motherboards', folder: 'motherboards', icon: 'motherboard_icon.png' },
+            { key: 'rams', folder: 'rams', icon: 'ram_icon.png' },
+            { key: 'gpus', folder: 'gpus', icon: 'gpu_icon.png' },
+            { key: 'storages', folder: 'storages', icon: 'hdd_icon.png' },
+            { key: 'psus', folder: 'psus', icon: 'power_supply_icon.png' },
+            { key: 'cases', folder: 'cases', icon: 'pc_case_icon.png' },
+            { key: 'coolers', folder: 'coolers', icon: 'cooler_cpu_icon.png' }
+        ];
+
+        let html = '';
+        icon_types.forEach(t => {
+            let comp = comps[t.key];
+            if (!comp) return;
+            if (t.key === 'storages' && Array.isArray(comp) && comp.length) comp = comp[0];
+            if (!comp || !comp.id) return;
+            let img = comp.image || '';
+            if (!img) img = `source/icons/${t.icon}`;
+            else if (!img.startsWith('http') && !img.startsWith('data:') && !img.startsWith('source/')) img = `source/${t.folder}/${img}`;
+            html += `<div class="build-icon" title="${comp.name || ''}"><img src="${img}" onerror="this.src='source/icons/${t.icon}'"></div>`;
+        });
+        return html;
+    };
+
+    const _bind_events = () => {
+        const save_btn = document.getElementById('save-build-btn');
+        if (save_btn) {
+            const new_save = save_btn.cloneNode(true);
+            save_btn.parentNode.replaceChild(new_save, save_btn);
+            document.getElementById('save-build-btn').addEventListener('click', _save_server);
+        }
+
+        const reset_btn = document.getElementById('reset-build-btn');
+        if (reset_btn) {
+            const new_reset = reset_btn.cloneNode(true);
+            reset_btn.parentNode.replaceChild(new_reset, reset_btn);
+            document.getElementById('reset-build-btn').addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                _reset();
+            });
+        }
+
+        const power_toggle = document.getElementById('power-toggle');
+        const power_widget = document.querySelector('.power-widget');
+        const power_details = document.getElementById('power-details');
+        if (power_toggle && power_widget && power_details) {
+            const new_toggle = power_toggle.cloneNode(true);
+            power_toggle.parentNode.replaceChild(new_toggle, power_toggle);
+            document.getElementById('power-toggle').addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                const active = power_widget.classList.toggle('active');
+                power_details.style.maxHeight = active ? '450px' : '0';
+                power_details.style.opacity = active ? '1' : '0';
+            });
+        }
+
+        document.getElementById('overclock-check')?.addEventListener('change', _calc_power);
+
+        const logout_link = document.getElementById('logout-link');
+        if (logout_link) {
+            const new_logout = logout_link.cloneNode(true);
+            logout_link.parentNode.replaceChild(new_logout, logout_link);
+            document.getElementById('logout-link').addEventListener('click', (e) => {
+                e.preventDefault();
+                _auth?.logout();
+            });
+        }
+
+        const login_link = document.getElementById('login-link');
+        if (login_link) {
+            const new_login = login_link.cloneNode(true);
+            login_link.parentNode.replaceChild(new_login, login_link);
+            document.getElementById('login-link').addEventListener('click', (e) => {
+                e.preventDefault();
+                _auth?.showModal();
+            });
+        }
+    };
+
+    const _init_compat_info = () => {
+        const header = document.querySelector('.compatibility-title');
+        if (!header || document.getElementById('info-btn')) return;
+
+        const btn = document.createElement('button');
+        btn.id = 'info-btn';
+        btn.innerHTML = '?';
+        btn.style.cssText = 'width:24px;height:24px;border-radius:50%;border:1px solid #d0d5dd;background:white;color:#475467;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:all 0.2s;margin-left:auto;';
+
+        btn.addEventListener('mouseenter', () => { btn.style.background = '#f2f4f7'; btn.style.borderColor = '#98a2b3'; });
+        btn.addEventListener('mouseleave', () => { btn.style.background = 'white'; btn.style.borderColor = '#d0d5dd'; });
+        header.appendChild(btn);
+
+        btn.addEventListener('click', () => {
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:10000;';
+            modal.innerHTML = `<div style="background:white;border-radius:8px;width:90%;max-width:440px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
+                <div style="padding:16px 20px;border-bottom:1px solid #eaecf0;display:flex;align-items:center;justify-content:space-between;">
+                    <h3 style="margin:0;font-size:18px;font-weight:600;color:#101828;">О совместимости</h3>
+                    <button id="close_info_modal" style="background:none;border:none;font-size:24px;color:#667085;cursor:pointer;padding:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:8px;">&times;</button>
+                </div>
+                <div style="padding:12px 20px;">
+                    <div style="margin-bottom:12px;font-size:13px;color:#475467;line-height:1.5;">Чтобы собрать компьютер, необходимо учитывать совместимость компонентов. Проверяется по:</div>
+                    <div style="margin-bottom:16px;font-size:13px;color:#475467;background:#f9fafb;padding:12px;border-radius:8px;">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="color:#667085;">&bull;</span><span>Сокет процессора и материнской платы</span></div>
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="color:#667085;">&bull;</span><span>Слоты ОЗУ материнской платы и плашек ОЗУ</span></div>
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="color:#667085;">&bull;</span><span>Поддержка M.2 слотов на плате</span></div>
+                        <div style="display:flex;align-items:center;gap:6px;"><span style="color:#667085;">&bull;</span><span>Количество SATA портов</span></div>
+                    </div>
+                </div>
+                <div style="padding:0 20px 12px 20px;">
+                    <div style="margin-bottom:16px;">
+                        <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;"><span style="width:20px;height:20px;background:#12b76a;color:white;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;">&#10003;</span><span style="font-size:13px;color:#344054;">Зеленый — компонент совместим</span></div>
+                        <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;"><span style="width:20px;height:20px;background:#f79009;color:white;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">&#9888;</span><span style="font-size:13px;color:#344054;">Желтый — есть предупреждения</span></div>
+                        <div style="display:flex;align-items:center;gap:8px;"><span style="width:20px;height:20px;background:#667085;color:white;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;">&#9888;</span><span style="font-size:13px;color:#344054;">Серый — компонент неактивен</span></div>
+                    </div>
+                    <div style="background:#f9fafb;border-radius:8px;padding:12px;">
+                        <div style="font-weight:500;margin-bottom:6px;color:#101828;font-size:13px;">Обязательно для сборки:</div>
+                        <ul style="margin:0;padding-left:20px;color:#475467;font-size:13px;">
+                            <li style="margin-bottom:2px;">Процессор</li>
+                            <li style="margin-bottom:2px;">Материнская плата</li>
+                            <li>Оперативная память</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>`;
+            document.body.appendChild(modal);
+
+            const close_modal = () => { document.body.removeChild(modal); };
+            modal.querySelector('#close_info_modal').addEventListener('click', close_modal);
+            modal.addEventListener('click', (e) => { if (e.target === modal) close_modal(); });
+        });
+    };
+
+    const _init = (data_manager, auth_manager) => {
+        _data = data_manager;
+        _auth = auth_manager;
+
+        _load_storage().then(() => {
+            window.addEventListener('auth:logout', () => {
+                Object.assign(_build, {
+                    cpus: null, motherboards: null, rams: null, gpus: null,
+                    storages: [], psus: null, cases: null, coolers: null
                 });
-                
-                if (!isCompatible) {
-                    return {
-                        compatible: false,
-                        message: `Корпус может не поддерживать плату ${mb.form_factor}. Проверьте спецификации.`
-                    };
-                }
-            }
-            return { compatible: true, message: '' };
-        }
-        
-        if (componentType === 'cpus') {
-            if (mb && mb.socket && component.socket) {
-                const cpuSocket = component.socket.toUpperCase();
-                const mbSocket = mb.socket.toUpperCase();
-                if (cpuSocket !== mbSocket) {
-                    return {
-                        compatible: false,
-                        message: `Сокет процессора (${component.socket}) не совпадает с сокетом материнской платы (${mb.socket})`
-                    };
-                }
-            }
-            
-            if (mb && mb.memory_type) {
-                const mbMemoryType = mb.memory_type.toUpperCase();
-                const mbIsDDR4 = mbMemoryType.includes('DDR4');
-                const mbIsDDR5 = mbMemoryType.includes('DDR5');
-                
-                if (component.name) {
-                    const cpuName = component.name.toLowerCase();
-                    
-                    if (mbIsDDR5 && cpuName.includes('ryzen 5 5600')) {
-                        return {
-                            compatible: false,
-                            message: `Процессор ${component.name} не поддерживает DDR5 память материнской платы`
-                        };
-                    }
-                    
-                    if (mbIsDDR4 && cpuName.includes('ryzen 5 7600')) {
-                        return {
-                            compatible: false,
-                            message: `Процессор ${component.name} требует DDR5 память, а материнская плата поддерживает DDR4`
-                        };
-                    }
-                }
-            }
-            
-            return { compatible: true, message: '' };
-        }
-        
-        return { compatible: true, message: '' };
-    }
+                _render_cards();
+                _calc_power();
+                _check_compat();
+                _clear_storage();
+            });
 
-}
+            const ready = () => {
+                _render_cards();
+                _calc_power();
+                _check_compat();
+                _bind_events();
+                _init_compat_info();
+            };
 
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', ready);
+            } else {
+                setTimeout(ready, 100);
+            }
+        });
+    };
+
+    return Object.freeze({
+        init: _init,
+        render_cards: _render_cards,
+        calc_power: _calc_power,
+        check_compat: _check_compat,
+        openSelection: _open_selection,
+        selectComponent: _select,
+        removeComponent: _remove,
+        loadSavedBuild: _load_saved,
+        showComponentDetails: _show_component_details,
+        getBuildIcons: _get_build_icons,
+        get build() { return _build; },
+        set build(v) { Object.assign(_build, v); }
+    });
+})();
+
+window.Configurator = Configurator;
