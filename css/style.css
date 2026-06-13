@@ -119,14 +119,7 @@ html {
 }
 
 .builds-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px;
-    padding: 10px 0;
-}
-
-.builds-grid {
-    display: grid;
+    display: block;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 20px;
     padding: 20px 0;
@@ -326,5 +319,326 @@ html {
     }
 }
 
+.component-link {
+    color: #1d1d1f;
+    text-decoration: none;
+    transition: color 0.2s;
+    cursor: pointer;
+}
 
+.component-link:hover {
+    color: #1d1d1f;
+}
+
+.component-card-name {
+    margin-bottom: 8px;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.community-carousel-section {
+    background-color: #dddddd;
+}
+
+.community-carousel-section .configurator-container {
+    position: relative;
+    padding: 0 10px; 
+}
+
+.carousel-header {
+    margin-bottom: 0;
+}
+
+.pc-card {
+    width: 400px;
+    background: #ebf0f3;
+    border-radius: 12px;
+    padding: 20px;
+    transition: transform 0.3s;
+    display: flex;
+    flex-direction: column; 
+    height: 100%; 
+}
+
+.pc-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+
+.image-section {
+    background: white;
+    border-radius: 10px;
+    padding: 15px;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    height: 200px; 
+}
+
+.main-image {
+    flex: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f5f5f5;
+    border-radius: 6px;
+    height: 100%;
+    overflow: hidden; 
+}
+
+.main-image img {
+    max-width: 90%;
+    max-height: 90%; 
+    object-fit: contain;
+}
+
+.thumbnails {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: 100%;
+}
+
+.thumb {
+    border: 1px solid #eee;
+    border-radius: 4px;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.thumb.tall {
+    flex: 1; 
+    height: auto;
+}
+
+.thumb-row {
+    display: flex;
+    gap: 5px;
+    flex: 1; 
+    height: auto;
+}
+
+.thumb.small {
+    flex: 1;
+}
+
+.thumb.more {
+    flex: 1;
+    font-size: 12px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+}
+
+.info-section {
+    margin-bottom: 20px;
+    flex-grow: 1;
+}
+
+.title {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 10px 0;
+}
+
+.specs {
+    font-size: 13px;
+    color: #7c8691;
+    line-height: 1.4;
+    margin: 0 0 8px 0;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.parts-count {
+    font-size: 12px;
+    color: black;
+}
+
+.footer-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+}
+
+.price {
+    font-size: 24px;
+    font-weight: 500;
+    color: black;
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-config {
+    background: #eef2f5;
+    border: 1px solid #1a202c;
+    border-radius: 6px;
+    padding: 10px 15px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.btn-like {
+    background: #141b27;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 15px;
+    cursor: pointer;
+    display: flex;
+    gap: 6px;
+}
+
+.carousel-viewport {
+    overflow: hidden;
+}
+
+.carousel-track {
+    display: flex;
+    gap: 20px;
+    transition: transform 0.4s;
+}
+
+.carousel-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.btn-carousel {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%); 
+    width: 50px;
+    height: 50px;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 50%; 
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+    cursor: pointer;
+    z-index: 10; 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #333;
+    transition: all 0.3s ease;
+}
+
+
+.btn-carousel.prev {
+    left: -25px; 
+}
+
+.btn-carousel.next {
+    right: -25px; 
+}
+
+.btn-carousel:hover {
+    background: #f8f9fa;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+    transform: translateY(-50%) scale(1.05); 
+}
+
+.btn-carousel[style*="opacity: 0.5"] {
+    cursor: default;
+    transform: translateY(-50%);
+    box-shadow: none;
+}
+
+.loading, .no-builds {
+    text-align: center;
+    padding: 60px;
+    color: #666;
+}
+
+.actual-price-info {
+    font-size: 13px;
+    margin: 4px 0;
+    padding: 4px 0;
+}
+
+.actual-price-label {
+    color: #666;
+    font-size: 12px;
+}
+
+.actual-price-value {
+    color: black;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.price-source {
+    color: #888;
+    font-size: 10px;
+    margin-left: 4px;
+}
+
+.build-price {
+    font-weight: 500;
+    color: #333;
+}
+
+.db-price {
+    color: black;
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+.actual-price {
+    color: black;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.custom-toast {
+    position: fixed;
+    top: -100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    color: black;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 10000;
+    transition: top 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    text-align: center;
+    white-space: nowrap;
+}
+.custom-toast.show {
+    top: 20px;
+}
+
+
+@media (max-width: 576px) {
+    .custom-toast {
+        white-space: normal;
+        max-width: 90%;
+        text-align: center;
+        padding: 10px 20px;
+        font-size: 13px;
+    }
+    
+    .custom-toast.show {
+        bottom: 20px;
+    }
+}
 

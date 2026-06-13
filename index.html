@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PC Configurator - Собери свой компьютер</title>
+    <title>Главная страница | PC Configurator</title>
     
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/components/header.css">
@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="css/components/configurator.css">
     <link rel="stylesheet" href="css/components/modal.css">
     <link rel="stylesheet" href="css/components/loader.css">
+    <link rel="icon" type="image/png" href="source/site_items/site_icon.png">
 </head>
 <body>
     <div id="global-loader" class="loader hidden">
@@ -27,12 +28,15 @@
                 <h1>PC Configurator</h1>
             </div>
             <ul class="nav-menu" id="nav-menu">
-                <li><a href="#" id="favorites-link" class="hidden">Избранное</a></li>
+                <li><a href="srav_component.html" id="srav-link" class="hidden">Сравнение</a></li>
                 <li><a href="#" id="admin-link" class="hidden">Админ панель</a></li>
                 <li><a href="#" id="login-link">Войти</a></li>
-                <li id="user-info" class="hidden"></li>
+                <li id="user-info" class="hidden">
+                    <div class="nav-user-info">
+                        <span id="nav-username"></span>
+                    </div>
+                </li>
                 <li><a href="#" id="logout-link" class="hidden">Выйти</a></li>
-                <li><a href="faq.html" id="faq-link">FAQ</a></li>
             </ul>
         </nav>
     </header>
@@ -81,8 +85,8 @@
                     <div class="compatibility-card">
                         <h3 class="compatibility-title">Статус совместимости</h3>
                         <div class="compatibility-counter" id="compatibility-count">0/7</div>
-                        <div class="progress-bar-container">
-                            <div class="progress-bar" id="progress-bar"></div>
+                        <div class="progress-container">
+                            <div class="progress-fill" id="progress-bar" style="width: 0%;"></div>
                         </div>
                         <p class="compatibility-text" id="compatibility-text">
                             Начните выбирать компоненты для совместимости
@@ -131,6 +135,27 @@
         </div>
     </section>
 
+    <div class="slogan-divider">
+        <div class="slogan-text">Сборки пользователей</div>
+    </div>
+
+
+    <section class="community-carousel-section">
+        <div class="configurator-container">
+            <div class="carousel-header">
+                <div class="carousel-controls">
+                    <button class="btn-carousel prev" id="prev-btn">←</button>
+                    <button class="btn-carousel next" id="next-btn">→</button>
+                </div>
+            </div>
+            
+            <div class="carousel-viewport">
+                <div class="carousel-track" id="community-builds-track">
+                    </div>
+            </div>
+        </div>
+    </section>
+
     <div id="component-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -170,7 +195,7 @@
                             placeholder="Введите пароль">
                     </div>
                     
-                    <button type="submit" class="btn btn-primary btn-block" id="auth-submit">
+                    <button type="button" class="btn btn-primary btn-block" id="auth-submit">
                         Войти
                     </button>
                     
@@ -195,23 +220,6 @@
     </div>
 
     <div class="scroll-top" onclick="scrollToTop()">↑</div>
-
-    <div id="favorites-modal" class="modal hidden">
-        <div class="modal-content large-modal">
-            <div class="modal-header">
-                <h3>Мои сборки</h3>
-                <span class="close-button">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div id="favorites-loading" class="hidden">
-                    <div class="spinner"></div>
-                    <p>Загрузка ваших сборок...</p>
-                </div>
-                <div id="favorites-grid" class="builds-grid">
-                    </div>
-            </div>
-        </div>
-    </div>
 
     <script src="js/pagination-manager.js"></script>
     <script src="js/data-manager.js"></script>

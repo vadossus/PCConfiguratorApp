@@ -1,28 +1,25 @@
 <?php
-class Database {
-    private $host = "MySQL-8.0"; // localhost если это XAMPP
-    private $db_name = "pc_configurator";
-    private $username = "root";
-    private $password = "";
-    private $conn;
+declare(strict_types=1);
 
-    public function getConnection() {
-        $this->conn = null;
+class Database
+{
+    private string $host = 'localhost';
+    private string $name = 'pc_configurator';
+    private string $user = 'root';
+    private string $pass = '';
+    private ?PDO $connection = null;
 
-        try {
-            $this->conn = new PDO(
-                //;port=3306 - при запуске OSPanel, если XAMPP можно удалить порт
-                "mysql:host=" . $this->host . ";port=3306;dbname=" . $this->db_name, 
-                $this->username,
-                $this->password
-            );
-            $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            $this->conn->exec("set names utf8");
-        } catch(PDOException $exception) {
-            echo "Connection error: " . $exception->getMessage();
+    public function connect(): PDO
+    {
+        if ($this->connection === null) {
+            $dsn = "mysql:host={$this->host};port=3306;dbname={$this->name};charset=utf8";
+            $options = [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+            ];
+            $this->connection = new PDO($dsn, $this->user, $this->pass, $options);
         }
-
-        return $this->conn;
+        return $this->connection;
     }
 }
-?>

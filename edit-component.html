@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Редактирование компонента | PC Configurator</title>
+    
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components/header.css">
+    <link rel="stylesheet" href="css/components/edit-component.css">
+    <link rel="stylesheet" href="css/components/loader.css">
+    <link rel="icon" type="image/png" href="source/site_items/site_icon.png">
+</head>
+<body>
+    <div id="global-loader" class="loader hidden">
+        <div class="loader-spinner"></div>
+        <div class="loader-text">Загрузка...</div>
+    </div>
+
+    <header class="main-header">
+        <nav class="navbar">
+            <div class="nav-brand">
+                <div class="logo-icon">
+                    <img src="source/site_items/site_icon.png" alt="PC Configurator">
+                </div>
+                <h1>PC Configurator</h1>
+            </div>
+            <ul class="nav-menu" id="nav-menu">
+                <li><a href="javascript:history.back()" style="font-size: 16px;">← Назад</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="edit-component">
+        <div class="edit-container">
+            <h1 class="edit-title">
+                Редактирование компонента: <span id="component-name-display"></span>
+            </h1>
+            <p class="edit-id" id="component-id-display"></p>
+
+            <form id="edit-component-form" class="edit-form">
+                <input type="hidden" name="id" id="component-id-input">
+                <input type="hidden" name="category_code" id="category-code-input">
+                <input type="hidden" name="reference_id" id="reference-id-input">
+                <input type="hidden" name="reference_table" id="reference-table-input">
+
+                <div class="form-grid">
+                    <div class="photo-column">
+                        <div class="photo-card">
+                            <div class="photo-preview" id="image-preview">
+                                <img 
+                                    src="source/icons/component_placeholder.png" 
+                                    alt="Preview" 
+                                    id="preview-img"
+                                    onerror="this.src='source/icons/component_placeholder.png'"
+                                />
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="image">Ссылка на фотографию</label>
+                            <input 
+                                type="text" 
+                                id="image" 
+                                name="image" 
+                                class="form-control" 
+                                placeholder="source/category/image.png или ссылкой"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="form-column">
+                        <div class="form-group">
+                            <label for="name">Название компонента</label>
+                            <input 
+                                type="text" 
+                                id="name" 
+                                name="name" 
+                                class="form-control" 
+                                required
+                                placeholder="Введите название компонента"
+                            />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="description">Описание</label>
+                            <textarea 
+                                id="description" 
+                                name="description" 
+                                class="form-control" 
+                                rows="4"
+                                placeholder="Введите описание компонента"
+                            ></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="price">Цена компонента</label>
+                            <div class="price-wrapper">
+                                <input 
+                                    type="number" 
+                                    id="price" 
+                                    name="price" 
+                                    class="form-control price-input" 
+                                    required
+                                    min="0"
+                                    step="1"
+                                    value="0"
+                                />
+                                <div class="price-counters">
+                                    <button type="button" class="counter-btn">−</button>
+                                    <button type="button" class="counter-btn">+</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="dynamic-fields" class="dynamic-fields"></div>
+
+                        <div class="form-group">
+                            <label for="is_active">Статус</label>
+                            <select id="is_active" name="is_active" class="form-control">
+                                <option value="1">Активен</option>
+                                <option value="0">Скрыт</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button type="button" class="btn btn-outline" id="delete-component-btn">
+                        Удалить
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="window.location.href='admin.html#components'">
+                        Отмена
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        Сохранить
+                    </button>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <div id="delete-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Удаление товара</h3>
+                <button class="close-btn" onclick="closeDeleteModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Удалить <strong id="delete-component-name"></strong>?</p>
+                <p class="warning-text">Действие необратимо.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">Отмена</button>
+                <button class="btn btn-danger" id="confirm-delete-btn">Удалить навсегда</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/auth.js"></script>
+    <script src="js/edit-component.js"></script>
+</body>
+</html>

@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Админ-панель - PC Configurator</title>
+    <title>Админ-панель | PC Configurator</title>
     
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/components/header.css">
     <link rel="stylesheet" href="css/components/admin.css">
     <link rel="stylesheet" href="css/components/modal.css">
     <link rel="stylesheet" href="css/components/loader.css">
+    <link rel="icon" type="image/png" href="source/site_items/site_icon.png">
 </head>
 <body>
     <div id="global-loader" class="loader hidden">
@@ -24,7 +25,7 @@
                 <div class="logo-icon">
                     <img src="source/site_items/site_icon.png" alt="PC Configurator">
                 </div>
-                <h1>PC Configurator - Админка</h1>
+                <h1>PC Configurator</h1>
             </div>
             <ul class="nav-menu" id="nav-menu">
                 <li><a href="index.html">Главная</a></li>
@@ -73,31 +74,11 @@
                     </li>
                 </ul>
             </nav>
-            
-            <div class="admin-sidebar-footer">
-                <div class="stats">
-                    <div class="stat-item">
-                        <span class="stat-value" id="total-users">0</span>
-                        <span class="stat-label">Пользователей</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-value" id="total-builds">0</span>
-                        <span class="stat-label">Сборок</span>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <div class="admin-content" id="admin-content">
             <section id="dashboard-section" class="admin-section active">
-                <div class="admin-section-header">
-                    <h2>Админ-панель</h2>
-                    <div class="admin-actions">
-                        <button class="btn btn-refresh" id="refresh-dashboard">
-                            Обновить
-                        </button>
-                    </div>
-                </div>
+                <div class="admin-section-header"></div>
                 
                 <div class="dashboard-stats">
                     <div class="stat-card">
@@ -129,16 +110,6 @@
                             <p class="stat-label">Сборок</p>
                         </div>
                     </div>
-                    
-                    <div class="stat-card">
-                        <div class="stat-icon">
-                            <img src="source/icons/error_icon.png" alt="Ошибки">
-                        </div>
-                        <div class="stat-info">
-                            <h3 class="stat-value" id="stat-errors">0</h3>
-                            <p class="stat-label">Ошибок</p>
-                        </div>
-                    </div>
                 </div>
                 
                 <div class="admin-section-block">
@@ -150,13 +121,9 @@
 
             <section id="components-section" class="admin-section">
             <div class="admin-section-header">
-                <h2>Управление компонентами</h2>
                 <div class="admin-actions">
                     <button class="btn btn-primary" id="add-component">
                         Добавить компонент
-                    </button>
-                    <button class="btn btn-refresh" id="refresh-components">
-                        Обновить
                     </button>
                 </div>
             </div>
@@ -220,12 +187,6 @@
           
             <section id="users-section" class="admin-section">
                 <div class="admin-section-header">
-                    <h2>Управление пользователями</h2>
-                    <div class="admin-actions">
-                        <button class="btn btn-refresh" id="refresh-users">
-                            Обновить
-                        </button>
-                    </div>
                 </div>
                 
                 <div class="users-table-container">
@@ -253,19 +214,8 @@
             </section>
 
             
-            <section id="builds-section" class="admin-section">
-                <div class="admin-section-header">
-                    <h2>Сборки пользователей</h2>
-                    <div class="admin-actions">
-                        <button class="btn btn-refresh" id="refresh-builds">
-                            
-                            Обновить
-                        </button>
-                    </div>
-                </div>
-                
+            <section id="builds-section" class="admin-section">                
                 <div class="builds-grid" id="builds-grid">
-                    
                 </div>
             </section>
         </div>

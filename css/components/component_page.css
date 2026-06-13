@@ -1,0 +1,204 @@
+/* Базовая структура */
+.component-page {
+    padding-top: 100px;
+    min-height: 100vh;
+    background: #f5f5f7;
+}
+
+.comp-wrapper {
+    max-width: 1100px; /* Немного сузил для лучшего фокуса */
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Сетка карточки */
+.product_grid {
+    display: grid;
+    grid-template-columns: 450px 1fr; /* Фиксированная ширина для фото */
+    gap: 40px;
+    background: #fff;
+    border-radius: 16px;
+    padding: 40px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    margin-bottom: 30px;
+}
+
+.img_block {
+    position: sticky;
+    top: 120px;
+}
+
+.img_wrap {
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+}
+
+.comp_img {
+    max-width: 100%;
+    max-height: 380px;
+    object-fit: contain;
+}
+
+/* Правая часть (инфо) */
+.info_block {
+    display: flex;
+    flex-direction: column;
+}
+
+.comp_name {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 8px;
+    color: #1d1d1f;
+}
+
+.comp_article {
+    font-size: 13px;
+    color: #86868b;
+    margin-bottom: 24px;
+}
+
+.price_card {
+    margin-bottom: 30px;
+}
+
+.price_value {
+    font-size: 32px;
+    font-weight: 800;
+    color: #1d1d1f;
+}
+
+.store_prices_block {
+    border-top: 1px solid #f0f0f2;
+    padding-top: 24px;
+}
+
+.store_prices_title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 16px;
+}
+
+.store_prices_list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px; /* Плотное прилегание как на скрине */
+}
+
+.store_pill_item {
+    display: flex;
+    align-items: center;
+    padding: 8px 14px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 14px;
+    color: #1d1d1f;
+    transition: all 0.2s ease;
+}
+
+.store_pill_item:hover {
+    border-color: #333;
+    background: #f9f9f9;
+}
+
+.store_pill_name {
+    margin-right: 6px;
+}
+
+.store_pill_price {
+    font-weight: 700;
+}
+
+.specs_desc_wrap {
+    background: #fff;
+    border-radius: 16px;
+    padding: 40px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+}
+
+.section_title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 30px;
+}
+
+.subsection_title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 20px;
+}
+
+/* Группы характеристик */
+.spec_group {
+    font-size: 14px;
+    font-weight: 800;
+    color: #1d1d1f;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 32px;
+    margin-bottom: 12px;
+}
+
+.spec_group:first-of-type {
+    margin-top: 0;
+}
+
+/* Строка характеристики с точками (Dot Leaders) */
+.spec_row {
+    display: flex;
+    align-items: baseline;
+    margin-bottom: 10px;
+    font-size: 15px;
+}
+
+.spec_label {
+    color: #86868b;
+    order: 1;
+}
+
+.spec_value {
+    color: #1d1d1f;
+    font-weight: 500;
+    order: 3;
+    padding-left: 8px;
+}
+
+/* Магия точек между названием и значением */
+.spec_row::after {
+    content: "";
+    flex: 1;
+    order: 2;
+    margin: 0 8px;
+    border-bottom: 1px dotted #d2d2d7;
+}
+
+/* Описание */
+.desc_section {
+    margin-top: 40px;
+}
+
+.desc_text {
+    font-size: 16px;
+    line-height: 1.6;
+    color: #424245;
+    border-radius: 12px;
+    white-space: pre-line;
+}
+
+/* Мобильная адаптация */
+@media (max-width: 900px) {
+    .product_grid {
+        grid-template-columns: 1fr;
+        padding: 20px;
+    }
+    
+    .img_block {
+        position: static;
+    }
+}

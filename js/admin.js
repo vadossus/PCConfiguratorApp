@@ -1,1869 +1,813 @@
-class AdminPanel {
-    constructor() {
-        this.API_BASE_URL = 'api/admin.php?action=';
-        this.currentSection = 'dashboard';
-        this.componentsData = [];
-        this.usersData = [];
-        this.buildsData = [];
-        this.componentTypes = {
-            'cpus': 'Процессоры',
-            'motherboards': 'Материнские платы', 
-            'rams': 'Оперативная память',
-            'gpus': 'Видеокарты',
-            'storages': 'Накопители',
-            'psus': 'Блоки питания',
-            'cases': 'Корпуса',
-            'coolers': 'Охлаждение'
-        };
+'use strict';
 
-        this.activityTypes = {
-            'user_register': 'Регистрация пользователя',
-            'user_delete': 'Удаление пользователя',
-            'user_role_change': 'Изменение роли пользователя',
-            'build_save': 'Сохранение сборки',
-            'build_delete': 'Удаление сборки',
-            'component_add': 'Добавление компонента',
-            'component_edit': 'Редактирование компонента',
-            'component_delete': 'Удаление компонента',
-            'component_toggle': 'Изменение статуса компонента',
-            'import_components': 'Импорт компонентов'
-        };
-        
-        this.activities = [];
-        this.activityPage = 1;
-        this.activityLimit = 15;
-        this.hasMoreActivities = true;
-        
-        this.filters = {
-            category: 'all',
-            search: '',
-            sortBy: 'id',
-            status: 'all',
-            sortOrder: 'desc',
-            page: 1,
-            limit: 10
-        };
-        
-        this.init();
-    }
+const AdminPanel = (() => {
+    const API = 'api/admin.php?action=';
+    const _state = { section: 'dashboard', activity_page: 1, activity_limit: 15, has_more: true, search_timer: null };
+    const _list = { components: [], users: [], builds: [], activities: [] };
+    const _filters = { category: 'all', search: '', sort: 'created_at', order: 'desc', status: 'all', page: 1, limit: 10 };
 
-    init() {
-        this.checkAdminAccess();
-        this.initUI();
-        this.loadDashboardData();
-        this.bindEvents();   
-    }
+    const TYPE_NAMES = Object.freeze({
+        cpus: 'Процессоры', motherboards: 'Материнские платы', rams: 'Оперативная память',
+        gpus: 'Видеокарты', storages: 'Накопители', psus: 'Блоки питания',
+        cases: 'Корпуса', coolers: 'Охлаждение'
+    });
 
-    checkAdminAccess() {
-        const savedUser = localStorage.getItem('currentUser');
-        
-        if (!savedUser) {
-            window.location.href = 'index.html';
-            return false;
-        }
-        
-        try {
-            const user = JSON.parse(savedUser);
-            
-            if (user.role !== 'admin') {
-                window.location.href = 'index.html';
-                return false;
-            }
-            
-            return true;
-            
-        } catch (error) {
-            window.location.href = 'index.html';
-            return false;
-        }
-    }
+    const ACTIVITY_NAMES = Object.freeze({
+        user_register: 'Регистрация пользователя', user_delete: 'Удаление пользователя',
+        user_role_change: 'Изменение роли пользователя', build_save: 'Сохранение сборки',
+        build_delete: 'Удаление сборки', component_add: 'Добавление компонента',
+        component_edit: 'Редактирование компонента', component_delete: 'Удаление компонента',
+        component_toggle: 'Изменение статуса компонента'
+    });
 
-    initUI() {
-        this.initNavigation();
-        this.showSection(this.currentSection);
-        this.initComponentTypeSelect();
-    }
+    const ICONS = Object.freeze({
+        cpus: 'cpu_icon.png', motherboards: 'motherboard_icon.png', rams: 'ram_icon.png',
+        gpus: 'gpu_icon.png', storages: 'hdd_icon.png', psus: 'power_supply_icon.png',
+        cases: 'pc_case_icon.png', coolers: 'cooler_cpu_icon.png'
+    });
 
-    initNavigation() {
-        const navLinks = document.querySelectorAll('.admin-nav-link');
-        navLinks.forEach(link => {
-            link.addEventListener('click', (e) => {
-                e.preventDefault();
-                const section = link.getAttribute('data-section');
-                this.switchSection(section);
-            });
+    const _esc = (text) => { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; };
+    const _format_price = (p) => new Intl.NumberFormat('ru-RU').format(p || 0);
+
+    const _show_loader = (t = 'Загрузка...') => {
+        const l = document.getElementById('global-loader');
+        const s = l?.querySelector('.loader-text');
+        if (s) s.textContent = t;
+        l?.classList.remove('hidden');
+    };
+
+    const _hide_loader = () => document.getElementById('global-loader')?.classList.add('hidden');
+    const _msg = (m, t = 'success') => alert(t === 'error' ? `Ошибка: ${m}` : m);
+
+    const _check_access = () => {
+        const s = localStorage.getItem('currentUser');
+        if (!s) { window.location.href = 'index.html'; return false; }
+        try { if (JSON.parse(s).role !== 'admin') { window.location.href = 'index.html'; return false; } return true; }
+        catch (e) { window.location.href = 'index.html'; return false; }
+    };
+
+    const _prepare_nav = () => {
+        document.querySelectorAll('.admin-nav-link').forEach(l => {
+            l.addEventListener('click', e => { e.preventDefault(); _switch_section(l.dataset.section); });
         });
-    }
+    };
 
-    initFilters() {
-        const typeFilter = document.getElementById('component-type-filter');
-        const searchInput = document.getElementById('component-search');
-        const sortSelect = document.getElementById('component-sort');
-        const statusFilter = document.getElementById('component-status');
-        
-        if (typeFilter) {
-            typeFilter.addEventListener('change', (e) => {
-                this.filters.category = e.target.value;
-                this.applyFilters();
-            });
-        }
-        
-        if (searchInput) {
-            searchInput.addEventListener('input', (e) => {
-                this.filters.search = e.target.value;
-                clearTimeout(this.searchTimeout);
-                this.searchTimeout = setTimeout(() => {
-                    this.applyFilters();
-                }, 500);
-            });
-        }
-        
-        if (sortSelect) {
-            sortSelect.addEventListener('change', (e) => {
-                const [sortBy, sortOrder] = e.target.value.split('-');
-                this.filters.sortBy = sortBy;
-                this.filters.sortOrder = sortOrder;
-                this.applyFilters();
-            });
-        }
-
-        if (statusFilter) {
-            statusFilter.addEventListener('change', (e) => {
-                this.filters.status = e.target.value;
-                this.filters.page = 1;
-                this.loadComponents();
-            });
-        }
-    }
-
-    async applyFilters() {
-        await this.loadComponents();
-    }
-
-    async logActivity(type, description = '') {
-        try {
-            const user = JSON.parse(localStorage.getItem('currentUser') || '{}');
-            const activityData = {
-                type: type,
-                readable_type: this.activityTypes[type] || type,
-                description: description,
-                user_id: user.id || 0
-            };
-            
-            const response = await fetch(`${this.API_BASE_URL}log_activity`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(activityData)
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                this.refreshActivityList();
-            }
-            
-        } catch (error) {
-        }
-    }
-
-    async loadActivities(page = 1, refresh = false) {
-        try {
-            if (refresh) {
-                this.activityPage = 1;
-                this.hasMoreActivities = true;
-                this.activities = [];
-            }
-            
-            const offset = (page - 1) * this.activityLimit;
-            const params = new URLSearchParams({
-                limit: this.activityLimit,
-                offset: offset
-            });
-            
-            const response = await fetch(`${this.API_BASE_URL}get_activities&${params.toString()}`);
-            const data = await response.json();
-            
-            if (data.success) {
-                const newActivities = data.activities || [];
-                
-                if (page === 1) {
-                    this.activities = newActivities;
-                } else {
-                    this.activities = [...this.activities, ...newActivities];
-                }
-                
-                this.hasMoreActivities = newActivities.length === this.activityLimit;
-                this.activityPage = page;
-                
-                this.updateActivityDisplay();
-            } else {
-                this.showFallbackActivity();
-            }
-            
-        } catch (error) {
-            this.showFallbackActivity();
-        }
-    }
-
-     updateActivityDisplay() {
-        const activityList = document.getElementById('activity-list');
-        if (!activityList) return;
-        
-        if (!this.activities || this.activities.length === 0) {
-            activityList.innerHTML = this.getEmptyActivityHTML();
-            return;
-        }
-        
-        const html = this.activities.map(activity => this.getActivityItemHTML(activity)).join('');
-        
-        let loadMoreHTML = '';
-        if (this.hasMoreActivities) {
-            loadMoreHTML = `
-                <div class="load-more-activities">
-                    <button class="btn-load-more" onclick="adminPanel.loadMoreActivities()">
-                        Показать еще
-                    </button>
-                </div>
-            `;
-        }
-        
-        activityList.innerHTML = html + loadMoreHTML;
-    }
-    
-    getEmptyActivityHTML() {
-        return `
-            <div class="no-activity">
-                <div class="no-activity-content">
-                    <p>История активности пуста</p>
-                    <small>Совершите действия в админ-панели, чтобы увидеть их здесь</small>
-                </div>
-            </div>
-        `;
-    }
-    
-    getActivityItemHTML(activity) {
-        const icon = activity.icon || this.getActivityIcon(activity.action_type);
-        const timeAgo = activity.timestamp_formatted || this.getTimeAgo(activity.created_at);
-        const userInfo = activity.user_display || (activity.username ? activity.username : 'Система');
-        
-        let description = activity.description_short || '';
-        if (!description && activity.description) {
-            const parts = activity.description.split(': ');
-            description = parts.length > 1 ? parts.slice(1).join(': ') : '';
-        }
-        
-        return `
-            <div class="activity-item">
-                <div class="activity-icon" title="${activity.action_type || 'Действие'}">
-                    ${icon}
-                </div>
-                <div class="activity-content">
-                    <div class="activity-header">
-                        <span class="activity-user">${userInfo}</span>
-                        <span class="activity-time">${timeAgo}</span>
-                    </div>
-                    <p class="activity-description">
-                        <strong>${activity.type_name || activity.action_type || 'Действие'}</strong>
-                        ${description ? `: ${description}` : ''}
-                    </p>
-                </div>
-            </div>
-        `;
-    }
-    
-    loadMoreActivities() {
-        this.loadActivities(this.activityPage + 1);
-    }
-    
-    refreshActivityList() {
-        this.loadActivities(1, true);
-    }
-    
-    getActivityIcon(actionType) {
-        const iconMap = {
-            'user_register': '👤',
-            'user_delete': '🗑️',
-            'user_role_change': '🔄',
-            'build_save': '💾',
-            'build_delete': '🗑️',
-            'component_add': '➕',
-            'component_edit': '✏️',
-            'component_delete': '🗑️',
-            'component_toggle': '⚡',
-            'login': '🔑',
-            'logout': '🚪',
-            'import_components': '📥'
-        };
-        
-        return iconMap[actionType] || '📝';
-    }
-    
-    getTimeAgo(timestamp) {
-        if (!timestamp) return 'Недавно';
-        
-        const now = new Date();
-        const activityTime = new Date(timestamp);
-        const diffMs = now - activityTime;
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
-        
-        if (diffMins < 1) return 'только что';
-        if (diffMins < 60) return `${diffMins} мин. назад`;
-        if (diffHours < 24) return `${diffHours} ч. назад`;
-        if (diffDays < 7) return `${diffDays} дн. назад`;
-        
-        return activityTime.toLocaleDateString('ru-RU', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    }
-    
-    showFallbackActivity() {
-        const activityList = document.getElementById('activity-list');
-        if (activityList) {
-            activityList.innerHTML = `
-                <div class="no-activity">
-                    <div class="no-activity-content">
-                        <p>Не удалось загрузить активность</p>
-                        <small>Проверьте подключение и попробуйте позже</small>
-                    </div>
-                </div>
-            `;
-        }
-    }
-
-    switchSection(section) {
+    const _switch_section = (name) => {
         document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
-        document.querySelectorAll('.admin-nav-link').forEach(link => link.classList.remove('active'));
-        
-        const sectionElement = document.getElementById(`${section}-section`);
-        const navLink = document.querySelector(`[data-section="${section}"]`);
-        
-        if (sectionElement) {
-            sectionElement.classList.add('active');
-            this.currentSection = section;
-            this.loadSectionData(section);
+        document.querySelectorAll('.admin-nav-link').forEach(l => l.classList.remove('active'));
+        const sec = document.getElementById(`${name}-section`);
+        const link = document.querySelector(`[data-section="${name}"]`);
+        if (sec) { sec.classList.add('active'); _state.section = name; _load_section(name); }
+        if (link) link.classList.add('active');
+    };
+
+    const _show_section = (name) => { const el = document.getElementById(`${name}-section`); if (el) _switch_section(name); };
+
+    const _load_section = (name) => {
+        const m = { dashboard: _load_dashboard, components: _load_components, users: _load_users, builds: _load_builds };
+        if (m[name]) m[name]();
+    };
+
+    const _fill_cat_select = () => {
+        const s = document.getElementById('component-category');
+        if (!s) return;
+        s.innerHTML = '<option value="">Выберите категорию</option>';
+        for (const [k, v] of Object.entries(TYPE_NAMES)) { const o = document.createElement('option'); o.value = k; o.textContent = v; s.appendChild(o); }
+    };
+
+    let _first_admin_id = null;
+
+    const _find_first_admin = () => {
+        const admins = _list.users.filter(u => u.role === 'admin');
+        if (admins.length > 0) {
+            admins.sort((a, b) => a.id - b.id);
+            _first_admin_id = admins[0].id;
         }
-        
-        if (navLink) navLink.classList.add('active');
-    }
+    };
 
-    showSection(section) {
-        const sectionElement = document.getElementById(`${section}-section`);
-        if (sectionElement) this.switchSection(section);
-    }
+    const _bind_events = () => {
+        document.getElementById('refresh-dashboard')?.addEventListener('click', _load_dashboard);
+        document.getElementById('refresh-components')?.addEventListener('click', _load_components);
+        document.getElementById('refresh-users')?.addEventListener('click', _load_users);
+        document.getElementById('refresh-builds')?.addEventListener('click', _load_builds);
+        document.getElementById('add-component')?.addEventListener('click', e => { e.stopPropagation(); _show_add_menu(e.target); });
+        _bind_filters();
+        document.getElementById('logout-link')?.addEventListener('click', e => { e.preventDefault(); localStorage.removeItem('currentUser'); window.location.href = 'index.html'; });
+    };
 
-    initComponentTypeSelect() {
-        const typeSelect = document.getElementById('component-category');
-        if (typeSelect) {
-            typeSelect.innerHTML = '<option value="">Выберите категорию</option>';
-            for (const [key, value] of Object.entries(this.componentTypes)) {
-                const option = document.createElement('option');
-                option.value = key;
-                option.textContent = value;
-                typeSelect.appendChild(option);
-            }
-        }
-    }
+    const _bind_filters = () => {
+        document.getElementById('component-type-filter')?.addEventListener('change', e => { _filters.category = e.target.value; _filters.page = 1; _load_components(); });
+        document.getElementById('component-search')?.addEventListener('input', e => { _filters.search = e.target.value; clearTimeout(_state.search_timer); _state.search_timer = setTimeout(() => { _filters.page = 1; _load_components(); }, 500); });
+        const sort = document.getElementById('component-sort');
+        if (sort) { sort.value = 'created_at-desc'; sort.addEventListener('change', e => { const [f, o] = (e.target.value || 'created_at-desc').split('-'); _filters.sort = f; _filters.order = o || 'desc'; _filters.page = 1; _load_components(); }); }
+        document.getElementById('component-status')?.addEventListener('change', e => { _filters.status = e.target.value; _filters.page = 1; _load_components(); });
+    };
 
-    async loadDashboardData() {
+    const _log_action = async (type, desc = '') => {
         try {
-            this.showLoader();
-            const stats = await this.getDashboardStats();
-            this.updateDashboardStats(stats);
-            await this.loadActivities();
-            this.hideLoader();
-        } catch (error) {
-            this.showError('Ошибка загрузки данных');
-            this.hideLoader();
-        }
-    }
+            const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
+            await fetch(`${API}log_activity`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, readable_type: ACTIVITY_NAMES[type] || type, description: desc, user_id: u.id || 0 }) });
+            _refresh_activities();
+        } catch (e) {}
+    };
 
-    async getDashboardStats() {
+    const _fetch_count = async (t) => { try { const r = await fetch(`${API}get_count&table=${t}`); const d = await r.json(); return d.count || 0; } catch (e) { return 0; } };
+
+    const _load_dashboard = async () => {
+        _show_loader();
         try {
-            const [users, components, builds] = await Promise.all([
-                this.fetchCount('users'),
-                this.fetchCount('components'),
-                this.fetchCount('user_builds')
-            ]);
+            const [u, c, b] = await Promise.all([_fetch_count('users'), _fetch_count('components'), _fetch_count('user_builds')]);
+            _update_stats({ users: u, components: c, builds: b });
+            await _load_activities();
+        } catch (e) { _msg('Ошибка загрузки', 'error'); }
+        _hide_loader();
+    };
 
-            return {
-                users: users,
-                components: components,
-                builds: builds,
-                errors: 0
-            };
-        } catch (error) {
-            return { users: 0, components: 0, builds: 0, errors: 0 };
-        }
-    }
+    const _update_stats = (s) => {
+        const m = { 'stat-users': s.users, 'stat-components': s.components, 'stat-builds': s.builds, 'total-users': s.users, 'total-builds': s.builds };
+        for (const [id, v] of Object.entries(m)) { const el = document.getElementById(id); if (el) el.textContent = v; }
+    };
 
-    async fetchCount(table) {
+    const _load_activities = async (page = 1, refresh = false) => {
         try {
-            const response = await fetch(`${this.API_BASE_URL}get_count&table=${table}`);
-            if (response.ok) {
-                const data = await response.json();
-                return data.count || 0;
-            }
-            return 0;
-        } catch (error) {
-            return 0;
-        }
-    }
+            if (refresh) { _state.activity_page = 1; _state.has_more = true; _list.activities = []; }
+            const off = (page - 1) * _state.activity_limit;
+            const r = await fetch(`${API}get_activities&limit=${_state.activity_limit}&offset=${off}`);
+            const d = await r.json();
+            if (d.success) {
+                const items = d.activities || [];
+                _list.activities = page === 1 ? items : [..._list.activities, ...items];
+                _state.has_more = items.length === _state.activity_limit;
+                _state.activity_page = page;
+                _render_activities();
+            } else { _show_empty_activity(); }
+        } catch (e) { _show_empty_activity(); }
+    };
 
-    updateDashboardStats(stats) {
-        const elements = {
-            'stat-users': stats.users,
-            'stat-components': stats.components,
-            'stat-builds': stats.builds,
-            'stat-errors': stats.errors,
-            'total-users': stats.users,
-            'total-builds': stats.builds
-        };
+    const _refresh_activities = () => _load_activities(1, true);
+    const _load_more_activities = () => _load_activities(_state.activity_page + 1);
 
-        for (const [id, value] of Object.entries(elements)) {
-            const element = document.getElementById(id);
-            if (element) element.textContent = value;
-        }
-    }
+    const _render_activities = () => {
+        const c = document.getElementById('activity-list');
+        if (!c) return;
+        if (!_list.activities.length) { c.innerHTML = _empty_activity_html(); return; }
+        let h = _list.activities.map(a => _activity_row(a)).join('');
+        if (_state.has_more) h += '<div class="load-more-activities"><button class="btn-load-more" onclick="AdminPanel.load_more_activities()">Показать еще</button></div>';
+        c.innerHTML = h;
+    };
 
-    async loadComponents() {
-        try {
-            this.showLoader('Загрузка компонентов...');
-            
-            const params = new URLSearchParams({
-                page: this.filters.page,
-                limit: this.filters.limit
+    const _activity_row = (a) => {
+        const t = a.timestamp_formatted || _format_time(a.created_at);
+        const u = a.user_display || (a.username || 'Система');
+        let d = a.description_short || '';
+        if (!d && a.description) { const p = a.description.split(': '); d = p.length > 1 ? p.slice(1).join(': ') : ''; }
+        return `<div class="activity-item"><div class="activity-content"><div class="activity-header"><span class="activity-user">${u}</span><span class="activity-time">${t}</span></div><p class="activity-description"><strong>${a.type_name || a.action_type || 'Действие'}</strong>${d ? `: ${d}` : ''}</p></div></div>`;
+    };
+
+    const _empty_activity_html = () => '<div class="no-activity"><div class="no-activity-content"><p>История активности пуста</p><small>Совершите действия в админ-панели</small></div></div>';
+    const _show_empty_activity = () => { const c = document.getElementById('activity-list'); if (c) c.innerHTML = '<div class="no-activity"><div class="no-activity-content"><p>Не удалось загрузить</p><small>Проверьте подключение</small></div></div>'; };
+
+    const _format_time = (s) => {
+        if (!s) return 'Недавно';
+        const n = new Date(), t = new Date(s), m = Math.floor((n - t) / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+        if (m < 1) return 'только что'; if (m < 60) return `${m} мин. назад`; if (h < 24) return `${h} ч. назад`; if (d < 7) return `${d} дн. назад`;
+        return t.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    };
+
+    const _load_components = async () => {
+        _show_loader('Загрузка компонентов...');
+        try {   
+            const p = new URLSearchParams({ 
+                page: _filters.page, 
+                limit: _filters.limit, 
+                sort_by: _filters.sort, 
+                sort_order: _filters.order 
             });
+            if (_filters.category !== 'all') p.append('category', _filters.category);
+            if (_filters.search.trim()) p.append('search', _filters.search.trim());
+            if (_filters.status !== 'all') p.append('is_active', _filters.status === 'active' ? '1' : '0');
             
-            if (this.filters.category && this.filters.category !== 'all') {
-                params.append('category', this.filters.category);
-            }
+            const r = await fetch(`${API}get_component&${p}`);
+            const d = await r.json();
             
-            if (this.filters.search) {
-                params.append('search', this.filters.search);
-            }
-            
-            if (this.filters.sortBy) {
-                params.append('sort', this.filters.sortBy);
-                params.append('order', this.filters.sortOrder);
-            }
-
-            if (this.filters.status && this.filters.status !== 'all') {
-                params.append('is_active', this.filters.status === 'active' ? '1' : '0');
-            }
-            
-            const response = await fetch(`${this.API_BASE_URL}get_component&${params.toString()}`);
-            if (!response.ok) throw new Error('Ошибка загрузки');
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                this.componentsData = data.components || [];
-                this.renderComponentsTable(this.componentsData, data.pagination?.total || 0);
-            } else {
-                this.showError(data.message || 'Ошибка загрузки компонентов');
-                this.renderComponentsTable([], 0);
-            }
-            
-            this.hideLoader();
-            
-        } catch (error) {
-            this.showError('Ошибка загрузки компонентов');
-            this.renderComponentsTable([], 0);
-            this.hideLoader();
-        }
-    }
-
-    async fetchUsers() {
-        try {
-            const response = await fetch(`${this.API_BASE_URL}get_users`);
-            if (!response.ok) throw new Error('Ошибка загрузки');
-            
-            const data = await response.json();
-            return data.users || [];
-        } catch (error) {
-            return [];
-        }
-    }
-
-    async loadUsers() {
-        try {
-            this.showLoader('Загрузка пользователей...');
-            this.usersData = await this.fetchUsers();
-            this.renderUsersTable(this.usersData);
-            this.hideLoader();
-        } catch (error) {
-            this.showError('Ошибка загрузки пользователей');
-            this.hideLoader();
-        }
-    }
-
-    async loadBuilds() {
-        const grid = document.getElementById('builds-grid');
-        if (!grid) return;
-
-        try {
-            const response = await fetch('api/admin.php?action=get_builds');
-            const data = await response.json();
-
-            if (data.success && data.builds && data.builds.length > 0) {
-                grid.innerHTML = data.builds.map(build => {
-                    const iconsHTML = this.renderBuildIcons(build.components || {});
-                    
-                    let componentCount = 0;
-                    if (build.components) {
-                        Object.values(build.components).forEach(comp => {
-                            if (Array.isArray(comp)) {
-                                componentCount += comp.length;
-                            } else if (comp && typeof comp === 'object') {
-                                componentCount++;
+            if (d.success && d.components && d.components.length > 0) {
+                const full_components = await Promise.all(
+                    d.components.map(async (c) => {
+                        try {
+                            const res = await fetch(`${API}get_component&id=${c.id}`);
+                            const data = await res.json();
+                            if (data.success && data.component) {
+                                return { ...c, ...data.component };
                             }
-                        });
-                    }
-
-                    return `
-                    <div class="build-card">
-                        <div class="build-card-header">
-                            <span class="build-id">#${build.id}</span>
-                            <div class="build-stats">
-                                <span class="component-count">${componentCount} компонентов</span>
-                                <span class="build-date">${new Date(build.created_at).toLocaleDateString('ru-RU')}</span>
-                            </div>
-                        </div>
-                        
-                        ${iconsHTML ? `
-                        <div class="build-preview-row">
-                            ${iconsHTML}
-                        </div>
-                        ` : '<div class="no-components">Нет выбранных компонентов</div>'}
-                        
-                        <div class="build-card-content">
-                            <h3>${build.name || 'Конфигурация ПК'}</h3>
-                            <p class="user">${build.username || 'Пользователь'}</p>
-                            <div class="price">${Number(build.total_price).toLocaleString('ru-RU')} ₽</div>
-                        </div>
-
-                        <div class="build-actions">
-                            <button class="btn-delete" onclick="adminPanel.deleteBuild(${build.id})">
-                                Удалить
-                            </button>
-                        </div>
-                    </div>`;
-                }).join('');
-            } else {
-                grid.innerHTML = '<div class="no-data">Сборок пока нет</div>';
-            }
-        } catch (error) {
-            grid.innerHTML = '<div class="no-data">Ошибка загрузки сборок</div>';
-        }
-    }
-
-    renderBuildIcons(components) {
-        if (!components) return '';
-        
-        const allCategories = [
-            { key: 'cpus', name: 'Процессор', icon: 'cpu_icon.png' },
-            { key: 'motherboards', name: 'Материнская плата', icon: 'motherboard_icon.png' },
-            { key: 'rams', name: 'Оперативная память', icon: 'ram_icon.png' },
-            { key: 'gpus', name: 'Видеокарта', icon: 'gpu_icon.png' },
-            { key: 'psus', name: 'Блок питания', icon: 'power_supply_icon.png' },
-            { key: 'cases', name: 'Корпус', icon: 'pc_case_icon.png' },
-            { key: 'coolers', name: 'Охлаждение', icon: 'cooler_cpu_icon.png' },
-            { key: 'storages', name: 'Накопители', icon: 'hdd_icon.png' }
-        ];
-        
-        let iconsHTML = '';
-        
-        allCategories.forEach(category => {
-            const item = components[category.key];
-            
-            if (category.key === 'storages') {
-                if (Array.isArray(item) && item.length > 0) {
-                    const maxToShow = 3;
-                    const storagesToShow = item.slice(0, maxToShow);
-                    
-                    storagesToShow.forEach((storage, index) => {
-                        if (storage && storage.id) {
-                            const title = storage.name || `Накопитель ${index + 1}`;
-                            const imgSrc = storage.image ? 
-                                `source/${category.key}/${storage.image}` : 
-                                `source/icons/${category.icon}`;
-                            
-                            iconsHTML += `
-                                <div class="mini-icon-slot storage-icon" title="${title}">
-                                    <img src="${imgSrc}" alt="${title}" 
-                                        onerror="this.src='source/icons/${category.icon}'">
-                                    ${index === 0 && item.length > maxToShow ? 
-                                        `<span class="storage-count">+${item.length - maxToShow}</span>` : ''}
-                                </div>
-                            `;
+                            return c;
+                        } catch (e) {
+                            return c;
                         }
-                    });
-                }
-            } 
-            else {
-                if (item && typeof item === 'object' && item.id) {
-                    const title = item.name || category.name;
-                    const imgSrc = item.image ? 
-                        (item.image.startsWith('http://') || item.image.startsWith('https://') ? 
-                            item.image : 
-                            `source/${category.key}/${item.image}`) : 
-                        `source/icons/${category.icon}`;
-                    
-                    iconsHTML += `
-                        <div class="mini-icon-slot" title="${title}">
-                            <img src="${imgSrc}" alt="${title}" 
-                                onerror="this.src='source/icons/${category.icon}'">
-                        </div>
-                    `;
-                }
-            }
-        });
-        
-        return iconsHTML;
-    }
-    
-    getImagePath(imageName, category) {
-        if (!imageName) return `source/icons/${category}_icon.png`;
-        
-        imageName = imageName.trim();
-        
-        if (imageName.startsWith('http://') || 
-            imageName.startsWith('https://') || 
-            imageName.startsWith('data:')) {
-            return imageName;
-        }
-        
-        return `source/${category}/${imageName}`;
-    }
-
-    async deleteBuild(id) {
-        if (!confirm('Вы уверены, что хотите удалить эту сборку?')) return;
-        
-        try {
-            const response = await fetch(`${this.API_BASE_URL}delete_build`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id })
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                this.showSuccess('Сборка успешно удалена');
-                await this.logActivity('build_delete', `Удалена сборка ID: ${id}`);
-                this.loadBuilds();
+                    })
+                );
+                _list.components = full_components;
             } else {
-                this.showError(data.message || 'Ошибка удаления');
+                _list.components = [];
             }
-        } catch (error) {
-            this.showError('Ошибка удаления сборки');
+            
+            _render_components_table(d.pagination?.total || 0);
+        } catch (e) { 
+            _render_components_table(0); 
         }
-    }
+        _hide_loader();
+    };
 
-    renderUsersTable(users) {
-        const tbody = document.getElementById('users-table-body');
-        if (!tbody) return;
-        
-        tbody.innerHTML = '';
-        
-        if (users.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center">Нет пользователей</td></tr>';
-            return;
-        }
-        
-        users.forEach(user => {
-            const row = document.createElement('tr');
-            
-            const buildsCount = user.builds_count || 0;
-            
-            row.innerHTML = `
-                <td>${user.id}</td>
-                <td>${this.escapeHtml(user.username)}</td>
-                <td>${this.escapeHtml(user.email)}</td>
-                <td>
-                    <select class="role-select" data-user-id="${user.id}" onchange="adminPanel.updateUserRole(${user.id}, this.value)">
-                        <option value="user" ${user.role === 'user' ? 'selected' : ''}>Пользователь</option>
-                        <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Администратор</option>
-                    </select>
-                </td>
-                <td>${new Date(user.created_at).toLocaleDateString('ru-RU')}</td>
-                <td>${buildsCount}</td>
-                <td>
-                    <span class="badge badge-success">Активен</span>
-                </td>
-                <td>
-                    <div class="table-actions">
-                        <button class="btn-action btn-delete" onclick="adminPanel.deleteUser(${user.id})" title="Удалить">
-                            <span>🗑️</span>
-                        </button>
-                    </div>
-                </td>
-            `;
-            
-            tbody.appendChild(row);
-        });
-    }
-
-    renderComponentsTable(components, totalItems = 0) {
+    const _render_components_table = (total) => {
         const tbody = document.getElementById('components-table-body');
         if (!tbody) return;
-        
         tbody.innerHTML = '';
         
-        if (components.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center">Компоненты не найдены</td></tr>';
-            this.renderPagination(0, 1, 10);
-            return;
+        if (!_list.components.length) { 
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center">Компоненты не найдены</td></tr>'; 
+            _render_pagination(0); 
+            return; 
         }
         
-        components.forEach(component => {
-            const row = document.createElement('tr');
+        _list.components.forEach(c => {
+            const category_code = c.reference_table || c.category_code || c.category || '';
+            const category_name = TYPE_NAMES[category_code] || category_code || 'Неизвестно';
             
-            const imagePath = component.image 
-                ? (component.image.startsWith('http://') || component.image.startsWith('https://') 
-                    ? component.image 
-                    : `source/${component.category_slug || 'components'}/${component.image}`)
-                : 'source/icons/component_placeholder.png';
+            let image_path = 'source/icons/component_placeholder.png';
+            if (c.image) {
+                if (c.image.startsWith('http://') || c.image.startsWith('https://')) {
+                    image_path = c.image;
+                } else if (c.image.startsWith('source/')) {
+                    image_path = c.image;
+                } else {
+                    image_path = `source/${category_code}/${c.image}`;
+                }
+            }
             
-            row.innerHTML = `
-                <td>${component.id}</td>
+            let specs = [];
+            if (c.socket) specs.push(`Сокет: ${c.socket}`);
+            if (c.memory_type) specs.push(c.memory_type);
+            if (c.type) specs.push(c.type);
+            if (c.cores) specs.push(`${c.cores} ядер`);
+            if (c.memory_size) specs.push(`${c.memory_size} ГБ`);
+            if (c.wattage) specs.push(`${c.wattage}W`);
+            if (c.form_factor) specs.push(c.form_factor);
+            if (c.chipset) specs.push(c.chipset);
+            if (c.capacity) specs.push(`${c.capacity} ГБ`);
+            if (c.tdp) specs.push(`TDP: ${c.tdp}W`);
+            if (c.speed) specs.push(`${c.speed} МГц`);
+            if (c.frequency) specs.push(c.frequency);
+            const specs_html = specs.length > 0 ? specs.slice(0, 2).join(' | ') : '—';
+            
+            const name = c.name || 'Без названия';
+            const price = c.price || 0;
+            const is_active = c.is_active == 1;
+            
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${c.id}</td>
                 <td>
                     <div class="component-info">
-                        <img src="${imagePath}" alt="${this.escapeHtml(component.name)}" 
-                             class="component-thumb" 
-                             onerror="this.src='source/icons/component_placeholder.png'">
+                        <img src="${image_path}" class="component-thumb" onerror="this.src='source/icons/component_placeholder.png'">
                         <div>
-                            <strong>${this.escapeHtml(component.name)}</strong>
-                            <div class="text-muted small">
-                                ${this.escapeHtml(component.description || '').substring(0, 50)}
-                                ${component.description && component.description.length > 50 ? '...' : ''}
-                            </div>
+                            <strong>${_esc(name)}</strong>
+                            <div class="text-muted small">${_esc(c.description || '').substring(0, 50)}</div>
                         </div>
                     </div>
                 </td>
-                <td>${this.componentTypes[component.category_slug] || component.category_slug || 'Неизвестно'}</td>
+                <td>${category_name}</td>
+                <td><div class="component-specs">${specs_html}</div></td>
+                <td class="text-right">${_format_price(price)} Р</td>
                 <td>
-                    <div class="component-specs">
-                        <div><small>${component.socket || '—'}</small></div>
-                        <div><small>${component.memory_type || '—'}</small></div>
-                    </div>
-                </td>
-                <td class="text-right">${this.formatPrice(component.price)} ₽</td>
-                <td>
-                    <span class="status-badge ${component.is_active ? 'active' : 'inactive'}">
-                        ${component.is_active ? 'Активен' : 'Не активен'}
+                    <span class="status-badge ${is_active ? 'active' : 'inactive'}">
+                        ${is_active ? 'Активен' : 'Скрыт'}
                     </span>
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn btn-sm btn-outline-primary" 
-                                onclick="adminPanel.editComponent(${component.id})" 
-                                title="Редактировать">
-                            Редактировать
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" 
-                                onclick="adminPanel.deleteComponent(${component.id})" 
-                                title="Удалить">
-                            Удалить
-                        </button>
-                        <button class="btn btn-sm btn-outline-secondary" 
-                                onclick="adminPanel.toggleComponent(${component.id}, ${component.is_active})" 
-                                title="${component.is_active ? 'Деактивировать' : 'Активировать'}">
-                            ${component.is_active ? '⛔' : '✅'}
-                        </button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="AdminPanel.edit_component(${c.id}, '${category_code}')">Редактировать</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="AdminPanel.delete_component(${c.id})">Удалить</button>
                     </div>
-                </td>
+                </td>`;
+            tbody.appendChild(tr);
+        });
+        _render_pagination(total);
+    };
+
+    const _render_pagination = (total) => {
+        const c = document.getElementById('components-pagination');
+        if (!c) return;
+        const pages = Math.ceil(total / _filters.limit);
+        if (pages <= 1) { c.innerHTML = ''; return; }
+        let h = '<div class="pagination">';
+        h += _page_btn(_filters.page - 1, '«', _filters.page === 1);
+        for (let i = 1; i <= pages; i++) {
+            if (i === 1 || i === pages || (i >= _filters.page - 2 && i <= _filters.page + 2)) h += _page_btn(i, i, false, i === _filters.page);
+            else if (i === _filters.page - 3 || i === _filters.page + 3) h += '<span class="page-dots">...</span>';
+        }
+        h += _page_btn(_filters.page + 1, '»', _filters.page === pages);
+        h += '</div>';
+        c.innerHTML = h;
+    };
+
+    const _page_btn = (p, t, dis, act = false) => `<button class="page-btn${dis ? ' disabled' : ''}${act ? ' active' : ''}" onclick="AdminPanel.go_to_page(${p})" ${dis ? 'disabled' : ''}>${t}</button>`;
+    const _go_to_page = (p) => { _filters.page = p; _load_components(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+
+    const _edit_component = async (id, category) => {
+        if (category) {
+            window.location.href = `edit-component.html?id=${id}&category=${category}`;
+            return;
+        }
+        
+        try {
+            const r = await fetch(`${API}get_component&id=${id}`);
+            const d = await r.json();
+            if (d.success && d.component) {
+                const cat = d.component.reference_table || d.component.category_code || d.component.category || '';
+                window.location.href = `edit-component.html?id=${id}&category=${cat}`;
+            } else {
+                _msg('Не удалось загрузить компонент', 'error');
+            }
+        } catch (e) { 
+            _msg('Ошибка загрузки', 'error'); 
+        }
+    };
+
+    let _price_cache = new Map();
+
+    const _fetch_actual_price = async (component_name) => {
+        if (!component_name) return null;
+        
+        const cache_key = component_name.toLowerCase().trim();
+        if (_price_cache.has(cache_key)) {
+            return _price_cache.get(cache_key);
+        }
+
+        try {
+            const response = await fetch(`api/parser.php?q=${encodeURIComponent(component_name)}`);
+            const data = await response.json();
+            
+            if (data.success && data.prices) {
+                const available = data.prices.filter(p => p.price !== null && p.price > 0 && p.in_stock === true);
+                if (available.length > 0) {
+                    available.sort((a, b) => a.price - b.price);
+                    const result = {
+                        best_price: available[0].price,
+                        best_shop: available[0].name,
+                        best_url: available[0].url,
+                        all_prices: available.map(p => ({
+                            name: p.name,
+                            price: p.price,
+                            url: p.url,
+                            in_stock: p.in_stock
+                        }))
+                    };
+                    _price_cache.set(cache_key, result);
+                    return result;
+                }
+            }
+            _price_cache.set(cache_key, null);
+            return null;
+        } catch (error) {
+            _price_cache.set(cache_key, null);
+            return null;
+        }
+    };
+
+    const _fetch_all_prices_for_build = async (build) => {
+        if (!build || !build.components) return { prices: {}, total_actual_price: null };
+        
+        let comps = build.components;
+        if (typeof comps === 'string') {
+            try { comps = JSON.parse(comps); } catch (e) { comps = {}; }
+        }
+        if (!Object.keys(comps).length && build.compatibility_data) {
+            try { comps = JSON.parse(build.compatibility_data); } catch (e) { comps = {}; }
+        }
+        
+        const price_results = {};
+        let total_actual_price = 0;
+        
+        const component_list = [];
+        
+        if (comps.cpus && comps.cpus.name) component_list.push({ type: 'cpus', name: comps.cpus.name });
+        if (comps.motherboards && comps.motherboards.name) component_list.push({ type: 'motherboards', name: comps.motherboards.name });
+        if (comps.gpus && comps.gpus.name) component_list.push({ type: 'gpus', name: comps.gpus.name });
+        if (comps.rams && comps.rams.name) component_list.push({ type: 'rams', name: comps.rams.name });
+        if (comps.psus && comps.psus.name) component_list.push({ type: 'psus', name: comps.psus.name });
+        if (comps.cases && comps.cases.name) component_list.push({ type: 'cases', name: comps.cases.name });
+        if (comps.coolers && comps.coolers.name) component_list.push({ type: 'coolers', name: comps.coolers.name });
+        
+        if (comps.storages && Array.isArray(comps.storages)) {
+            comps.storages.forEach((storage, idx) => {
+                if (storage && storage.name) {
+                    component_list.push({ type: `storage_${idx}`, name: storage.name });
+                }
+            });
+        }
+        
+        const price_promises = component_list.map(async (comp) => {
+            const price_data = await _fetch_actual_price(comp.name);
+            return { type: comp.type, price_data: price_data };
+        });
+        
+        const results = await Promise.all(price_promises);
+        
+        results.forEach(result => {
+            price_results[result.type] = result.price_data;
+            if (result.price_data && result.price_data.best_price) {
+                total_actual_price += result.price_data.best_price;
+            }
+        });
+        
+        return { prices: price_results, total_actual_price: total_actual_price };
+    };
+
+    const _delete_component = async (id) => {
+        if (!confirm('Удалить компонент?')) return;
+        _show_loader('Удаление...');
+        try {
+            const r = await fetch(`${API}delete_component`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+            const d = await r.json();
+            if (d.success) {
+                _msg('Компонент удалён');
+                await _log_action('component_delete', `Удалён компонент ID: ${id}`);
+                if (_list.components.length <= 1 && _filters.page > 1) _filters.page--;
+                await _load_components();
+            } else _msg(d.message || 'Ошибка', 'error');
+        } catch (e) { _msg('Ошибка', 'error'); }
+        _hide_loader();
+    };
+
+    const _load_users = async () => {
+        _show_loader('Загрузка пользователей...');
+        try { const r = await fetch(`${API}get_users`); const d = await r.json(); _list.users = d.users || []; _render_users_table(); }
+        catch (e) { _msg('Ошибка загрузки', 'error'); }
+        _hide_loader();
+    };
+
+    const _render_users_table = () => {
+        const tbody = document.getElementById('users-table-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        
+        if (!_list.users.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center">Нет пользователей</td></tr>';
+            return;
+        }
+        
+        _find_first_admin();
+        
+        const current_user = JSON.parse(localStorage.getItem('currentUser') || '{}');
+        const is_first_admin = (current_user.id == _first_admin_id);
+        const is_admin = (current_user.role === 'admin');
+        
+        _list.users.forEach(u => {
+            const tr = document.createElement('tr');
+            
+            let can_change_role = false;
+            let can_delete = false;
+            
+            if (is_first_admin) {
+                if (u.id != current_user.id) {
+                    can_change_role = true;
+                }
+                if (u.id != current_user.id) {
+                    can_delete = true;
+                }
+            } 
+            else if (is_admin && !is_first_admin) {
+                can_change_role = false;
+                if (u.role !== 'admin') {
+                    can_delete = true;
+                }
+            }
+            
+            let role_html = '';
+            if (can_change_role) {
+                role_html = `<select class="role-select" data-user-id="${u.id}" data-current-role="${u.role}">
+                                <option value="user" ${u.role === 'user' ? 'selected' : ''}>Пользователь</option>
+                                <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Администратор</option>
+                            </select>`;
+            } else {
+                role_html = `<span class="role-badge ${u.role}">${u.role === 'admin' ? 'Администратор' : 'Пользователь'}</span>`;
+            }
+            
+            let delete_html = '';
+            if (can_delete) {
+                delete_html = `<button class="btn-action btn-delete" data-user-id="${u.id}">Удалить</button>`;
+            } else {
+                delete_html = '<span class="text-muted">—</span>';
+            }
+            
+            let mark = '';
+            if (u.id == _first_admin_id && u.role === 'admin') {
+                mark = ' [Главный]';
+            }
+            
+            tr.innerHTML = `
+                <td>${u.id}${mark}</td>
+                <td>${_esc(u.username)}</td>
+                <td>${_esc(u.email)}</td>
+                <td>${role_html}</td>
+                <td>${new Date(u.created_at).toLocaleDateString('ru-RU')}</td>
+                <td>${u.builds_count || 0}</td>
+                <td><span class="badge badge-success">Активен</span></td>
+                <td>${delete_html}</td>
             `;
-            
-            tbody.appendChild(row);
+            tbody.appendChild(tr);
         });
         
-        this.renderPagination(totalItems, this.filters.page, this.filters.limit);
-    }
-
-    renderPagination(totalItems, currentPage, itemsPerPage) {
-        const pagination = document.getElementById('components-pagination');
-        if (!pagination) return;
-        
-        const totalPages = Math.ceil(totalItems / itemsPerPage);
-        
-        if (totalPages <= 1) {
-            pagination.innerHTML = '';
-            return;
-        }
-        
-        let html = `<div class="pagination">`;
-        
-        html += `<button class="page-btn ${currentPage === 1 ? 'disabled' : ''}" 
-                         onclick="adminPanel.changePage(${currentPage - 1})" 
-                         ${currentPage === 1 ? 'disabled' : ''}>&laquo;</button>`;
-        
-        for (let i = 1; i <= totalPages; i++) {
-            if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
-                html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" 
-                                 onclick="adminPanel.changePage(${i})">${i}</button>`;
-            } else if (i === currentPage - 3 || i === currentPage + 3) {
-                html += `<span class="page-dots">...</span>`;
-            }
-        }
-        
-        html += `<button class="page-btn ${currentPage === totalPages ? 'disabled' : ''}" 
-                         onclick="adminPanel.changePage(${currentPage + 1})" 
-                         ${currentPage === totalPages ? 'disabled' : ''}>&raquo;</button>`;
-        
-        html += `</div>`;
-        
-        pagination.innerHTML = html;
-    }
-
-    changePage(page) {
-        this.filters.page = page;
-        this.applyFilters();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    async editComponent(id) {
-        try {
-            this.showLoader('Загрузка компонентов...');
-            
-            const response = await fetch(`${this.API_BASE_URL}get_components`);
-            if (!response.ok) throw new Error('ошибка загрузки компонентов');
-            
-            const data = await response.json();
-            this.hideLoader();
-            
-            if (data.success && data.components) {
-                const component = data.components.find(comp => parseInt(comp.id) === parseInt(id));
-                if (component) {
-                    this.showEditComponentModal(component);
-                } else {
-                    this.showError('компонент не найден');
+        document.querySelectorAll('.role-select').forEach(select => {
+            select.addEventListener('change', async () => {
+                const userId = select.dataset.userId;
+                const newRole = select.value;
+                const currentRole = select.dataset.currentRole;
+                
+                let confirmMsg = '';
+                if (currentRole === 'admin' && newRole === 'user') {
+                    confirmMsg = 'Понизить этого администратора до пользователя?';
+                } else if (currentRole === 'user' && newRole === 'admin') {
+                    confirmMsg = 'Назначить этого пользователя администратором?';
                 }
-            } else {
-                this.showError(data.message || 'ошибка загрузки компонентов');
-            }
-            
-        } catch (error) {
-            this.hideLoader();
-            this.showError('ошибка загрузки данных компонента');
-        }
-    }
-
-    showEditComponentModal(component) {
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.id = 'edit-component-modal';
-        modal.innerHTML = `
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Редактировать компонент</h3>
-                    <span class="close-button" onclick="this.closest('.modal').remove()">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <form id="edit-component-form" class="admin-form">
-                        <input type="hidden" name="id" value="${component.id}">
-                        
-                        <div class="form-group">
-                            <label>Категория:</label>
-                            <select name="category" required disabled>
-                                <option value="${component.category_slug}">
-                                    ${this.componentTypes[component.category_slug] || component.category_slug}
-                                </option>
-                            </select>
-                            <small class="form-text">Категория не может быть изменена</small>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Название:</label>
-                            <input type="text" name="name" value="${this.escapeHtml(component.name)}" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Описание:</label>
-                            <textarea name="description" rows="3">${this.escapeHtml(component.description || '')}</textarea>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Цена (₽):</label>
-                            <input type="number" name="price" value="${component.price}" required min="0" step="0.01">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Изображение:</label>
-                            <input type="text" name="image" value="${this.escapeHtml(component.image || '')}" 
-                                placeholder="URL или имя файла">
-                            <small class="form-text">
-                                Введите URL (ссылкой) или имя файла из папки source/категория/
-                            </small>
-                        </div>
-                        
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Сокет:</label>
-                                <input type="text" name="socket" value="${this.escapeHtml(component.socket || '')}">
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Тип памяти:</label>
-                                <input type="text" name="memory_type" value="${this.escapeHtml(component.memory_type || '')}">
-                            </div>
-                        </div>
-                        
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Мощность (Вт):</label>
-                                <input type="number" name="wattage" value="${component.wattage || ''}" min="0">
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Ёмкость (ГБ):</label>
-                                <input type="number" name="capacity" value="${component.capacity || ''}" min="0">
-                            </div>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Критические характеристики (JSON массив):</label>
-                            <textarea name="critical_specs" rows="3">${this.formatJSONForTextarea(component.critical_specs)}</textarea>
-                            <small class="form-text">Формат: ["характеристика1", "характеристика2"]</small>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Флаги совместимости (JSON массив):</label>
-                            <textarea name="compatibility_flags" rows="3">${this.formatJSONForTextarea(component.compatibility_flags)}</textarea>
-                            <small class="form-text">Формат: ["флаг1", "флаг2"]</small>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Статус:</label>
-                            <select name="is_active">
-                                <option value="1" ${component.is_active ? 'selected' : ''}>Активен</option>
-                                <option value="0" ${!component.is_active ? 'selected' : ''}>Не активен</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-actions">
-                            <button type="submit" class="btn btn-primary">Сохранить</button>
-                            <button type="button" class="btn btn-secondary" 
-                                    onclick="this.closest('.modal').remove()">Отмена</button>
-                            <button type="button" class="btn btn-danger" 
-                                    onclick="adminPanel.deleteComponent(${component.id}, true)">Удалить</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        const form = modal.querySelector('#edit-component-form');
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            await this.updateComponent(new FormData(form));
-        });
-    }
-
-    async updateComponent(formData) {
-        try {
-            const componentData = {
-                id: parseInt(formData.get('id')),
-                name: formData.get('name'),
-                description: formData.get('description') || '',
-                price: parseFloat(formData.get('price')),
-                image: formData.get('image') || '',
-                socket: formData.get('socket') || null,
-                memory_type: formData.get('memory_type') || null,
-                wattage: formData.get('wattage') ? parseInt(formData.get('wattage')) : null,
-                capacity: formData.get('capacity') ? parseInt(formData.get('capacity')) : null,
-                is_active: formData.get('is_active') === '1' ? 1 : 0
-            };
-            
-
-            const imageValue = formData.get('image') || '';
-            if (imageValue && 
-                !imageValue.startsWith('http://') && 
-                !imageValue.startsWith('https://') && 
-                imageValue.includes('.')) {
-                componentData.image = imageValue;
-            } else {
-                componentData.image = imageValue;
-            }
-            const criticalSpecsText = formData.get('critical_specs');
-            if (criticalSpecsText && criticalSpecsText.trim()) {
-                try {
-                    componentData.critical_specs = JSON.parse(criticalSpecsText);
-                } catch (e) {
-                    this.showError('Ошибка в critical_specs');
+                
+                if (confirmMsg && !confirm(confirmMsg)) {
+                    _load_users();
                     return;
                 }
-            }
-            
-            const compatibilityFlagsText = formData.get('compatibility_flags');
-            if (compatibilityFlagsText && compatibilityFlagsText.trim()) {
+                
                 try {
-                    componentData.compatibility_flags = JSON.parse(compatibilityFlagsText);
-                } catch (e) {
-                    this.showError('Ошибка в compatibility_flags');
-                    return;
-                }
-            }
-            
-            const response = await fetch(`${this.API_BASE_URL}update_component`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(componentData)
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                this.showSuccess('компонент успешно обновлен');
-                await this.logActivity('component_edit', `Обновлён компонент ID: ${componentData.id}`);
-                document.getElementById('edit-component-modal')?.remove();
-                this.loadComponents();
-            } else {
-                this.showError(data.message || 'ошибка обновления');
-            }
-            
-        } catch (error) {
-            this.showError('Ошибка обновления компонента');
-        }
-    }
-
-    async deleteComponent(id, fromModal = false) {
-        if (!fromModal && !confirm('Вы уверены, что хотите удалить этот компонент?')) {
-            return;
-        }
-        
-        if (fromModal) {
-            if (!confirm('Вы уверены, что хотите удалить этот компонент?\nЭто действие нельзя отменить.')) {
-                return;
-            }
-            document.getElementById('edit-component-modal')?.remove();
-        }
-        
-        try {
-            const response = await fetch(`${this.API_BASE_URL}delete_component`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id })
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                this.showSuccess('Компонент успешно удален');
-                await this.logActivity('component_delete', `Удалён компонент ID: ${id}`);
-                this.loadComponents();
-            } else {
-                this.showError(data.message || 'Ошибка удаления');
-            }
-            
-        } catch (error) {
-            this.showError('Ошибка удаления компонента');
-        }
-    }
-
-    async toggleComponent(id, currentStatus) {
-        try {
-            const response = await fetch(`${this.API_BASE_URL}toggle_component`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    id: id, 
-                    is_active: !currentStatus 
-                })
-            });
-            
-            const data = await response.json();
-            if (data.success) {
-                this.showSuccess(`Компонент ${!currentStatus ? 'активирован' : 'деактивирован'}`);
-                const action = !currentStatus ? 'активирован' : 'деактивирован';
-                await this.logActivity('component_toggle', `Компонент ID:${id} ${action}`);
-                this.loadComponents();
-            } else {
-                this.showError(data.message || 'Ошибка изменения статуса');
-            }
-        } catch (error) {
-            this.showError('Ошибка изменения статуса');
-        }
-    }
-
-    async updateUserRole(userId, newRole) {
-        try {
-            const response = await fetch(`${this.API_BASE_URL}update_user_role`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    user_id: userId, 
-                    role: newRole 
-                })
-            });
-            
-            const data = await response.json();
-            if (data.success) {
-                this.showSuccess(`Роль пользователя изменена на "${newRole === 'admin' ? 'Администратор' : 'Пользователь'}"`);
-                await this.logActivity('user_role_change', `ID пользователя: ${userId}, новая роль: ${newRole}`);
-
-                const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-                if (currentUser.id === userId) {
-                    currentUser.role = newRole;
-                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                }
-                
-                this.loadUsers();
-            } else {
-                this.showError(data.message || 'Ошибка изменения роли');
-            }
-        } catch (error) {
-            this.showError('Ошибка изменения роли пользователя');
-        }
-    }
-
-    async deleteUser(id) {
-        if (!confirm('Вы уверены, что хотите удалить этого пользователя?')) return;
-        
-        try {
-            const response = await fetch(`${this.API_BASE_URL}delete_user`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id })
-            });
-            
-            const data = await response.json();
-            if (data.success) {
-                this.showSuccess('Пользователь успешно удален');
-                await this.logActivity('user_delete', `Удалён пользователь ID: ${id}`);
-                this.loadUsers();
-            } else {
-                this.showError(data.message || 'Ошибка удаления');
-            }
-        } catch (error) {
-            this.showError('Ошибка удаления пользователя');
-        }
-    }
-
-    showAddComponentModal() {
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.id = 'add-component-modal';
-        modal.innerHTML = `
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Добавить компоненты</h3>
-                    <span class="close-button" onclick="this.closest('.modal').remove()">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <div class="tabs">
-                        <button class="tab-btn active" data-tab="manual">Вручную</button>
-                        <button class="tab-btn" data-tab="json">Импорт JSON</button>
-                        <button class="tab-btn" data-tab="bulk">Массовый импорт</button>
-                    </div>
-                    
-                    <div class="tab-content active" id="tab-manual">
-                        <form id="add-component-form" class="admin-form">
-                            <div class="form-group">
-                                <label>Категория:</label>
-                                <select id="component-category-modal" name="category" required>
-                                    <option value="">Выберите категорию</option>
-                                </select>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Название:</label>
-                                <input type="text" name="name" required>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Цена (₽):</label>
-                                <input type="number" name="price" required min="0">
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Изображение:</label>
-                                <input type="text" name="image" 
-                                    placeholder="Ссылкой или имя файла (например: cpu_amd.png)">
-                                <small class="form-text">
-                                    Можно указать URL или имя файла из папки source/категория/
-                                </small>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Сокет (для CPU/MB):</label>
-                                <input type="text" name="socket" placeholder="AM4, LGA1700 и т.д.">
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Тип памяти (для RAM/MB):</label>
-                                <select name="memory_type">
-                                    <option value="">Не указан</option>
-                                    <option value="DDR4">DDR4</option>
-                                    <option value="DDR5">DDR5</option>
-                                </select>
-                            </div>
-                            
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Мощность (Вт):</label>
-                                    <input type="number" name="wattage" min="0">
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label>Ёмкость (ГБ):</label>
-                                    <input type="number" name="capacity" min="0">
-                                </div>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Критические характеристики (JSON массив):</label>
-                                <textarea name="critical_specs" placeholder='["6 ядер", "12 потоков", "3.7 ГГц"]' rows="3"></textarea>
-                                <small class="form-text">В формате JSON массива: ["характеристика1", "характеристика2"]</small>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Флаги совместимости (JSON массив):</label>
-                                <textarea name="compatibility_flags" placeholder='["AM4", "DDR4"]' rows="3"></textarea>
-                                <small class="form-text">В формате JSON массива: ["флаг1", "флаг2"]</small>
-                            </div>
-                            
-                            <div class="form-actions">
-                                <button type="submit" class="btn btn-primary">Добавить</button>
-                                <button type="button" class="btn btn-secondary" onclick="this.closest('.modal').remove()">Отмена</button>
-                            </div>
-                        </form>
-                    </div>
-                    
-                    <div class="tab-content" id="tab-json">
-                        <div class="upload-area" id="json-upload-area">
-                            <div class="upload-icon">📁</div>
-                            <h4>Перетащите JSON файл сюда</h4>
-                            <p>или</p>
-                            <input type="file" id="json-file-input" accept=".json" 
-                                onchange="adminPanel.handleFileUpload(event)" 
-                                style="display: none;">
-                            <label for="json-file-input" class="btn btn-primary">
-                                Выберите файл
-                            </label>
-                            <p class="upload-hint">Поддерживается структура компонентов по категориям</p>
-                        </div>
-                        
-                        <div class="json-preview" id="json-preview" style="display: none;">
-                            <h4>Предпросмотр данных</h4>
-                            <pre id="json-preview-content"></pre>
-                            <button class="btn btn-success" onclick="adminPanel.confirmImport()">Импортировать</button>
-                        </div>
-                        
-                        <div class="form-actions" style="margin-top: 20px;">
-                            <button class="btn btn-secondary" onclick="adminPanel.downloadTemplate()">
-                                Скачать шаблон
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="tab-content" id="tab-bulk">
-                        <div class="form-group">
-                            <label>JSON данные (полная структура):</label>
-                            <textarea id="bulk-json-input" placeholder='{
-    "components": {
-        "cpus": [...],
-        "motherboards": [...],
-    }
-}' rows="15"></textarea>
-                        </div>
-                        <div class="form-actions">
-                            <button class="btn btn-primary" onclick="adminPanel.importBulkJSON()">
-                                Импортировать все
-                            </button>
-                            <button class="btn btn-secondary" onclick="adminPanel.validateJSON()">
-                                Проверить JSON
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        this.initTabs(modal);
-        this.initCategorySelect(modal);
-        
-        const form = modal.querySelector('#add-component-form');
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            await this.submitComponentForm(new FormData(form));
-        });
-        
-        this.initDragAndDrop(modal);
-    }
-
-    initTabs(modal) {
-        modal.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const tab = btn.dataset.tab;
-                modal.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-                modal.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                btn.classList.add('active');
-                modal.querySelector(`#tab-${tab}`).classList.add('active');
-            });
-        });
-    }
-
-    initCategorySelect(modal) {
-        const categorySelect = modal.querySelector('#component-category-modal');
-        categorySelect.innerHTML = '<option value="">Выберите категорию</option>';
-        for (const [key, value] of Object.entries(this.componentTypes)) {
-            const option = document.createElement('option');
-            option.value = key;
-            option.textContent = value;
-            categorySelect.appendChild(option);
-        }
-    }
-
-    initDragAndDrop(modal) {
-        const uploadArea = modal.querySelector('#json-upload-area');
-        const fileInput = modal.querySelector('#json-file-input');
-        
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            uploadArea.addEventListener(eventName, (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-            });
-        });
-        
-        ['dragenter', 'dragover'].forEach(eventName => {
-            uploadArea.addEventListener(eventName, () => {
-                uploadArea.classList.add('dragover');
-            });
-        });
-        
-        ['dragleave', 'drop'].forEach(eventName => {
-            uploadArea.addEventListener(eventName, () => {
-                uploadArea.classList.remove('dragover');
-            });
-        });
-        
-        uploadArea.addEventListener('drop', (e) => {
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                fileInput.files = files;
-                fileInput.dispatchEvent(new Event('change'));
-            }
-        });
-    }
-
-    async submitComponentForm(formData) {
-        try {
-            const componentData = {
-                category_slug: formData.get('category'),
-                name: formData.get('name'),
-                price: parseFloat(formData.get('price')),
-                image: formData.get('image') || '',
-                socket: formData.get('socket') || '',
-                memory_type: formData.get('memory_type') || '',
-                wattage: formData.get('wattage') ? parseInt(formData.get('wattage')) : null,
-                capacity: formData.get('capacity') ? parseInt(formData.get('capacity')) : null
-            };
-            
-            const imageValue = formData.get('image') || '';
-                if (imageValue && 
-                    !imageValue.startsWith('http://') && 
-                    !imageValue.startsWith('https://') && 
-                    imageValue.includes('.')) {
-                    componentData.image = imageValue;
-                } else {
-                    componentData.image = imageValue;
-                }
-
-            const criticalSpecsText = formData.get('critical_specs');
-            if (criticalSpecsText && criticalSpecsText.trim()) {
-                try {
-                    componentData.critical_specs = JSON.parse(criticalSpecsText);
-                } catch (e) {
-                    this.showError('Ошибка в critical_specs');
-                    return;
-                }
-            }
-            
-            const compatibilityFlagsText = formData.get('compatibility_flags');
-            if (compatibilityFlagsText && compatibilityFlagsText.trim()) {
-                try {
-                    componentData.compatibility_flags = JSON.parse(compatibilityFlagsText);
-                } catch (e) {
-                    this.showError('Ошибка в compatibility_flags');
-                    return;
-                }
-            }
-            
-            const response = await fetch(`${this.API_BASE_URL}add_component`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(componentData)
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                this.showSuccess('компонент успешно добавлен');
-                await this.logActivity('component_add', `добавлен компонент: ${componentData.name}`);
-                document.getElementById('add-component-modal')?.remove();
-                this.loadComponents();
-            } else {
-                this.showError(data.message || 'ошибка добавления');
-            }
-            
-        } catch (error) {
-            this.showError('ошибка добавления компонента');
-        }
-    }
-
-    async importBulkJSON() {
-        const textarea = document.getElementById('bulk-json-input');
-        const jsonText = textarea.value.trim();
-        
-        if (!jsonText) {
-            this.showError('Введите в формате JSON данные');
-            return;
-        }
-        
-        try {
-            const jsonData = JSON.parse(jsonText);
-            await this.importFromJSON(jsonData);
-        } catch (error) {
-            this.showError('Ошибка парсинга JSON');
-        }
-    }
-
-    validateJSON() {
-        const textarea = document.getElementById('bulk-json-input');
-        const jsonText = textarea.value.trim();
-        
-        if (!jsonText) {
-            this.showError('Введите в формате JSON данные');
-            return;
-        }
-        
-        try {
-            const jsonData = JSON.parse(jsonText);
-            const componentCount = this.countComponents(jsonData);
-            
-            this.showMessage(
-                `Найдено компонентов:\n` +
-                Object.entries(componentCount).map(([cat, count]) => `• ${this.componentTypes[cat] || cat}: ${count}`).join('\n'),
-                'success'
-            );
-            
-        } catch (error) {
-            this.showError('Ошибка в JSON');
-        }
-    }
-
-    countComponents(jsonData) {
-        const counts = {};
-        if (jsonData.components) {
-            for (const [category, components] of Object.entries(jsonData.components)) {
-                counts[category] = Array.isArray(components) ? components.length : 0;
-            }
-        }
-        return counts;
-    }
-
-    async importFromJSON(jsonData) {
-        try {
-            this.showLoader('Импорт компонентов из JSON...');
-            
-            if (!jsonData.components) {
-                throw new Error('формат JSON не верный: отсутствует секция components');
-            }
-            
-            let importedCount = 0;
-            let errors = [];
-            
-            const categoryMap = {
-                'cpus': 'cpus',
-                'motherboards': 'motherboards',
-                'rams': 'rams',
-                'gpus': 'gpus',
-                'storages': 'storages',
-                'psus': 'psus',
-                'cases': 'cases',
-                'coolers': 'coolers'
-            };
-            
-            for (const [categorySlug, components] of Object.entries(jsonData.components)) {
-                for (const component of components) {
-                    try {
-                        const componentData = this.prepareComponentForImport(component, categorySlug);
-                        
-                        const response = await fetch(`${this.API_BASE_URL}add_component`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(componentData)
-                        });
-                        
-                        const result = await response.json();
-                        
-                        if (result.success) {
-                            importedCount++;
-                        } else {
-                            errors.push({
-                                component: component.name,
-                                error: result.message
-                            });
-                        }
-                        
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                        
-                    } catch (error) {
-                        errors.push({
-                            component: component.name,
-                            error: error.message
-                        });
-                    }
-                }
-            }
-            
-            this.hideLoader();
-            
-            if (errors.length === 0) {
-                this.showSuccess(`Успешно импортировано ${importedCount} компонентов`);
-                await this.logActivity('import_components', `Импортировано ${importedCount} компонентов`);
-                this.loadComponents();
-            } else {
-                this.showMessage(
-                    `импортировано ${importedCount} компонентов, ${errors.length} ошибок`,
-                    'warning'
-                );
-            }
-            
-            return { importedCount, errors };
-            
-        } catch (error) {
-            this.hideLoader();
-            this.showError('ошибка импорта');
-            return { importedCount: 0, errors: [error.message] };
-        }
-    }
-
-    prepareComponentForImport(component, categorySlug) {
-        const componentData = {
-            category_slug: categorySlug,
-            name: component.name,
-            price: component.price,
-            image: component.image || '',
-        };
-        
-        componentData.description = `импортирован: ${component.name}`;
-        
-        if (component.critical_specs && Array.isArray(component.critical_specs)) {
-            componentData.critical_specs = component.critical_specs;
-        }
-        
-        if (component.compatibility_flags && Array.isArray(component.compatibility_flags)) {
-            componentData.compatibility_flags = component.compatibility_flags;
-        }
-        
-        switch(categorySlug) {
-            case 'cpus':
-                componentData.socket = component.socket || '';
-                componentData.wattage = component.wattage || null;
-                componentData.description = `Процессор ${component.name}`;
-                break;
-                
-            case 'motherboards':
-                componentData.socket = component.socket || '';
-                componentData.memory_type = component.memoryType || component.type || '';
-                componentData.form_factor = component.formFactor || '';
-                componentData.description = `Материнская плата ${component.name}`;
-                break;
-                
-            case 'rams':
-                componentData.memory_type = component.type || '';
-                componentData.speed = component.speed || null;
-                componentData.capacity = component.size || null;
-                componentData.description = `Оперативная память ${component.name}`;
-                break;
-                
-            case 'gpus':
-                componentData.wattage = component.wattage || null;
-                componentData.description = `Видеокарта ${component.name}`;
-                break;
-                
-            case 'storages':
-                componentData.type = component.type || '';
-                componentData.capacity = component.capacity || null;
-                componentData.description = `Накопитель ${component.name}`;
-                break;
-                
-            case 'psus':
-                componentData.wattage = component.wattage || null;
-                componentData.efficiency = component.efficiency || '';
-                componentData.form_factor = component.formFactor || '';
-                componentData.description = `Блок питания ${component.name}`;
-                break;
-                
-            case 'cases':
-                componentData.form_factor = component.formFactor || '';
-                componentData.description = `Корпус ${component.name}`;
-                break;
-                
-            case 'coolers':
-                componentData.type = component.type || '';
-                if (component.socket) {
-                    if (Array.isArray(component.socket)) {
-                        componentData.socket = component.socket.join(', ');
+                    const res = await fetch('api/admin.php?action=update_user_role', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: userId, role: newRole })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        alert('Роль изменена');
+                        _load_users();
                     } else {
-                        componentData.socket = component.socket.toString();
+                        alert(data.message || 'Ошибка');
+                        _load_users();
                     }
+                } catch (err) {
+                    alert('Ошибка соединения');
+                    _load_users();
                 }
-                componentData.tdp = component.tdp || null;
-                componentData.description = `Охлаждение ${component.name}`;
-                break;
-        }
-        
-        Object.keys(componentData).forEach(key => {
-            if (componentData[key] === null || componentData[key] === undefined || componentData[key] === '') {
-                delete componentData[key];
-            }
+            });
         });
         
-        return componentData;
-    }
+        document.querySelectorAll('.btn-delete').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const userId = btn.dataset.userId;
+                if (!confirm('Удалить пользователя?')) return;
+                
+                try {
+                    const res = await fetch('api/admin.php?action=delete_user', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: userId })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        alert('Пользователь удалён');
+                        _load_users();
+                    } else {
+                        alert(data.message || 'Ошибка');
+                    }
+                } catch (err) {
+                    alert('Ошибка соединения');
+                }
+            });
+        });
+    };
 
-    async handleFileUpload(event) {
-        const file = event.target.files[0];
-        if (!file) return;
+    const _change_role = async (uid, role) => {
+        try {
+            const r = await fetch(`${API}update_user_role`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: uid, role }) });
+            const d = await r.json();
+            if (d.success) {
+                _msg(`Роль изменена на "${role === 'admin' ? 'Администратор' : 'Пользователь'}"`);
+                await _log_action('user_role_change', `ID: ${uid}, роль: ${role}`);
+                const cu = JSON.parse(localStorage.getItem('currentUser') || '{}');
+                if (cu.id === uid) { cu.role = role; localStorage.setItem('currentUser', JSON.stringify(cu)); }
+                _load_users();
+            } else _msg(d.message || 'Ошибка', 'error');
+        } catch (e) { _msg('Ошибка', 'error'); }
+    };
+
+    const _remove_user = async (id) => {
+        if (!confirm('Удалить пользователя?')) return;
+        try {
+            const r = await fetch(`${API}delete_user`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+            const d = await r.json();
+            if (d.success) { _msg('Пользователь удалён'); await _log_action('user_delete', `ID: ${id}`); _load_users(); }
+            else _msg(d.message || 'Ошибка', 'error');
+        } catch (e) { _msg('Ошибка', 'error'); }
+    };
+
+    const _load_builds = async () => {
+        const c = document.getElementById('builds-grid');
+        if (!c) return;
         
-        if (!file.name.endsWith('.json')) {
-            this.showError('Пожалуйста, выберите JSON файл');
-            return;
-        }
+        _show_loader('Загрузка сборок...');
         
         try {
-            this.showLoader('Чтение файла...');
+            const r = await fetch('api/builds.php?action=get_builds');
+            const d = await r.json();
             
-            const reader = new FileReader();
+            if (!d.success || !d.builds?.length) { 
+                c.innerHTML = '<div class="no-data">Сборок пока нет</div>'; 
+                _hide_loader();
+                return; 
+            }
             
-            reader.onload = async (e) => {
-                try {
-                    const jsonData = JSON.parse(e.target.result);
-                    
-                    if (!confirm(`Найдено компонентов:\n` +
-                        `• Процессоры: ${jsonData.components?.cpus?.length || 0}\n` +
-                        `• Материнские платы: ${jsonData.components?.motherboards?.length || 0}\n` +
-                        `• Оперативная память: ${jsonData.components?.rams?.length || 0}\n` +
-                        `• Видеокарты: ${jsonData.components?.gpus?.length || 0}\n` +
-                        `• Накопители: ${jsonData.components?.storages?.length || 0}\n` +
-                        `• Блоки питания: ${jsonData.components?.psus?.length || 0}\n` +
-                        `• Корпуса: ${jsonData.components?.cases?.length || 0}\n` +
-                        `• Охлаждение: ${jsonData.components?.coolers?.length || 0}\n\n` +
-                        `Импортировать все компоненты?`)) {
-                        this.hideLoader();
-                        return;
-                    }
-                    
-                    await this.importFromJSON(jsonData);
-                    
-                } catch (error) {
-                    this.hideLoader();
-                    this.showError('Ошибка парсинга JSON');
+            c.innerHTML = '<div class="builds-list-container"><div class="builds-horizontal-list" id="builds-horizontal-list"></div></div>';
+            const list = document.getElementById('builds-horizontal-list');
+            
+            const hasInternet = navigator.onLine;
+            
+            for (const b of d.builds) {
+                let comps = b.components || {};
+                if (typeof comps === 'string') {
+                    try { comps = JSON.parse(comps); } catch (e) { comps = {}; }
                 }
-            };
-            
-            reader.onerror = () => {
-                this.hideLoader();
-                this.showError('Ошибка чтения файла');
-            };
-            
-            reader.readAsText(file);
-            
-        } catch (error) {
-            this.hideLoader();
-            this.showError('Ошибка загрузки файла');
-        }
-    }
-
-    downloadTemplate() {
-        const template = {
-            "metadata": {
-                "total_components": {
-                    "cpus": 8,
-                    "motherboards": 6,
-                    "rams": 5,
-                    "gpus": 6,
-                    "storages": 4,
-                    "psus": 4,
-                    "cases": 3,
-                    "coolers": 4
+                if (!Object.keys(comps).length && b.compatibility_data) {
+                    try { comps = JSON.parse(b.compatibility_data); } catch (e) { comps = {}; }
                 }
-            },
-            "components": {
-                "cpus": [
-                    {
-                        "id": 1,
-                        "name": "Пример процессора",
-                        "category": "cpu",
-                        "price": 25000,
-                        "image": "cpu_example.png",
-                        "compatibility_flags": ["AM4", "DDR4"],
-                        "critical_specs": ["6 ядер", "12 потоков", "3.7 ГГц"],
-                        "socket": "AM4",
-                        "wattage": 65
+                
+                const specs = [];
+                if (comps.cpus?.name) specs.push(comps.cpus.name);
+                if (comps.gpus?.name) specs.push(comps.gpus.name);
+                if (comps.rams?.name) specs.push(comps.rams.name);
+                if (comps.motherboards?.name) specs.push(comps.motherboards.name);
+                
+                const base_price = Number(b.total_price || 0);
+                const price = base_price.toLocaleString('ru-RU');
+                const icons = _build_icons(comps);
+                
+                let actual_price_html = '';
+                
+                if (hasInternet) {
+                    actual_price_html = `
+                        <div class="actual-price-placeholder" data-build-id="${b.id}">
+                            <span class="actual-price-loading">Загрузка актуальной цены...</span>
+                        </div>`;
+                } else {
+                    actual_price_html = `<div class="text-muted" style="font-size:13px;margin-top:4px;">Цены временно недоступны (нет интернета)</div>`;
+                }
+                
+                const card = document.createElement('div');
+                card.className = 'pc-build-card';
+                card.dataset.id = b.id;
+                card.innerHTML = `
+                    <div class="card-info-side">
+                        <div class="icons-container">${icons || '<span class="empty-list">Нет компонентов</span>'}</div>
+                        <div class="details-container">
+                            <div class="build-label">Сборка: ${_esc(b.name || 'Без названия')}</div>
+                            <div class="build-price">Цена в базе: ${price} Р</div>
+                            ${actual_price_html}
+                            <div class="specs-summary">${specs.join(' | ') || 'Конфигурация пуста'}</div>
+                            <div class="build-meta">
+                                <div class="build-user">Пользователь: ${_esc(b.username || 'Пользователь')}</div>
+                                <div class="build-date">${b.created_at ? new Date(b.created_at).toLocaleDateString('ru-RU') : ''}</div>
+                            </div>
+                            <div class="status-row">
+                                <div class="like">&#9733; <span>${b.likes || 0}</span></div>
+                                ${b.is_public == 1 ? '<span class="public-badge">Публичная</span>' : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-price-side">
+                        <div class="controls-row">
+                            <button class="btn-primary-action btn-load" data-id="${b.id}">Загрузить</button>
+                        </div>
+                        <button class="btn-text-delete btn-delete" data-id="${b.id}">Удалить сборку</button>
+                    </div>`;
+                list.appendChild(card);
+            }
+            
+            _bind_build_buttons(d.builds);
+            _hide_loader();
+            
+            if (hasInternet) {
+                for (const b of d.builds) {
+                    let comps = b.components || {};
+                    if (typeof comps === 'string') {
+                        try { comps = JSON.parse(comps); } catch (e) { comps = {}; }
                     }
-                ],
-                "motherboards": [
-                    {
-                        "id": 1,
-                        "name": "Пример материнской платы",
-                        "category": "motherboard",
-                        "price": 15000,
-                        "image": "mb_example.png",
-                        "compatibility_flags": ["AM4", "DDR4"],
-                        "critical_specs": ["Socket AM4", "DDR4", "2 слота M.2"],
-                        "socket": "AM4",
-                        "memoryType": "DDR4",
-                        "formFactor": "ATX"
+                    if (!Object.keys(comps).length && b.compatibility_data) {
+                        try { comps = JSON.parse(b.compatibility_data); } catch (e) { comps = {}; }
                     }
-                ]
+                    
+                    const build_with_comps = { ...b, components: comps };
+                    
+                    try {
+                        const price_info = await _fetch_all_prices_for_build(build_with_comps);
+                        const actual_total = price_info.total_actual_price;
+                        
+                        const placeholder = document.querySelector(`.actual-price-placeholder[data-build-id="${b.id}"]`);
+                        if (placeholder) {
+                            if (actual_total) {
+                                placeholder.innerHTML = `
+                                    <span class="text-success">Актуальная цена: ${actual_total.toLocaleString('ru-RU')} Р</span>
+                                    <span class="text-muted"> (по данным магазинов)</span>
+                                `;
+                            } else {
+                                placeholder.innerHTML = '<span class="text-muted">Не удалось получить актуальную цену</span>';
+                            }
+                        }
+                    } catch (e) {
+                        const placeholder = document.querySelector(`.actual-price-placeholder[data-build-id="${b.id}"]`);
+                        if (placeholder) {
+                            placeholder.innerHTML = '<span class="text-muted">Цены временно недоступны</span>';
+                        }
+                    }
+                }
             }
-        };
-        
-        const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'components_template.json';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        this.showMessage('Шаблон скачан!', 'info');
-    }
+            
+        } catch (e) { 
+            c.innerHTML = '<div class="no-data">Ошибка загрузки сборок</div>'; 
+            _hide_loader();
+        }
+    };
 
-    bindEvents() {
-        document.getElementById('refresh-dashboard')?.addEventListener('click', () => this.loadDashboardData());
-        document.getElementById('refresh-components')?.addEventListener('click', () => this.loadComponents());
-        document.getElementById('refresh-users')?.addEventListener('click', () => this.loadUsers());
-        document.getElementById('refresh-builds')?.addEventListener('click', () => this.loadBuilds());
+    const _build_icons = (comps) => {
+        const types = [{ k: 'cpus', f: 'cpus', i: 'cpu_icon.png' }, { k: 'motherboards', f: 'motherboards', i: 'motherboard_icon.png' }, { k: 'rams', f: 'rams', i: 'ram_icon.png' }, { k: 'gpus', f: 'gpus', i: 'gpu_icon.png' }, { k: 'storages', f: 'storages', i: 'hdd_icon.png' }, { k: 'psus', f: 'psus', i: 'power_supply_icon.png' }, { k: 'cases', f: 'cases', i: 'pc_case_icon.png' }, { k: 'coolers', f: 'coolers', i: 'cooler_cpu_icon.png' }];
+        let h = '';
+        types.forEach(t => { let c = comps[t.k]; if (!c) return; if (t.k === 'storages' && c.length) c = c[0]; let img = c.image; if (!img || img === '') img = `source/icons/${t.i}`; else if (!img.startsWith('http') && !img.startsWith('data:') && !img.startsWith('source/')) img = `source/${t.f}/${img}`; h += `<div class="build-icon" title="${_esc(c.name)}"><img src="${img}" onerror="this.src='source/icons/${t.i}'"></div>`; });
+        return h;
+    };
+
+    const _bind_build_buttons = (builds) => {
+        document.querySelectorAll('.btn-load').forEach(b => { 
+        b.addEventListener('click', () => { 
+            const build = builds.find(x => x.id == b.dataset.id); 
+            if (build) {
+                window.location.href = `index.html?load_build_id=${build.id}`;
+            } 
+        }); 
+    });
         
-        document.getElementById('add-component')?.addEventListener('click', () => this.showAddComponentModal());
-        
-        this.initFilters();
-        
-        document.getElementById('logout-link')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            localStorage.removeItem('currentUser');
-            window.location.href = 'index.html';
+        document.querySelectorAll('.btn-delete').forEach(b => { 
+            b.addEventListener('click', async () => { 
+                if (!confirm('Удалить сборку?')) return; 
+                
+                const r = await fetch(`${API}delete_build`, {  
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ id: b.dataset.id }) 
+                }); 
+                const d = await r.json(); 
+                
+                if (d.success) { 
+                    await _log_action('build_delete', `ID: ${b.dataset.id}`); 
+                    _load_builds(); 
+                } else {
+                    alert(d.message || 'Ошибка'); 
+                }
+            }); 
         });
-    }
+    };
 
-    showLoader(text = 'Загрузка...') {
-        const loader = document.getElementById('global-loader');
-        const loaderText = loader?.querySelector('.loader-text');
-        if (loaderText) loaderText.textContent = text;
-        loader?.classList.remove('hidden');
-    }
+    const _show_build_details = (id) => {};
 
-    hideLoader() {
-        const loader = document.getElementById('global-loader');
-        loader?.classList.add('hidden');
-    }
+    const _show_add_menu = (btn) => {
+        const old = document.querySelector('.add-component-menu');
+        if (old) { old.remove(); return; }
+        const menu = document.createElement('div');
+        menu.className = 'add-component-menu';
+        let items = '';
+        for (const [slug, name] of Object.entries(TYPE_NAMES)) items += `<div class="menu-item" data-cat="${slug}"><img src="source/icons/${ICONS[slug]}" onerror="this.src='source/icons/error_icon.png'"><span>${name}</span></div>`;
+        menu.innerHTML = `<div class="menu-header">Выберите категорию</div><div class="menu-items">${items}</div>`;
+        menu.style.cssText = 'position:fixed;z-index:10000;';
+        document.body.appendChild(menu);
+        const place = () => { const r = btn.getBoundingClientRect(); let t = r.bottom + 5, l = r.left; const mr = menu.getBoundingClientRect(); if (l + mr.width > window.innerWidth) l = window.innerWidth - mr.width - 10; if (t + mr.height > window.innerHeight) t = r.top - mr.height - 5; menu.style.top = t + 'px'; menu.style.left = Math.max(l, 10) + 'px'; };
+        place();
+        window.addEventListener('resize', place);
+        window.addEventListener('scroll', place, true);
+        menu.querySelectorAll('.menu-item').forEach(item => { item.addEventListener('click', () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); menu.remove(); window.location.href = `edit-component.html?new=1&cat=${item.dataset.cat}`; }); });
+        setTimeout(() => { const close = e => { if (!menu.contains(e.target) && e.target !== btn) { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('click', close); menu.remove(); } }; document.addEventListener('click', close); }, 100);
+    };
 
-    showSuccess(message) {
-        alert(message);
-    }
+    const _init = () => {
+        if (!_check_access()) return;
+        _prepare_nav();
+        _show_section(_state.section);
+        _load_dashboard();
+        _bind_events();
+        _fill_cat_select();
+    };
 
-    showError(message) {
-        alert(message);
-    }
+    return Object.freeze({
+        init: _init,
+        load_more_activities: _load_more_activities,
+        go_to_page: _go_to_page,
+        edit_component: _edit_component,
+        delete_component: _delete_component,
+        change_role: _change_role,
+        remove_user: _remove_user,
+        show_build_details: _show_build_details
+    });
+})();
 
-    showMessage(message, type = 'info') {
-        if (type === 'info') {
-            alert('ℹ ' + message);
-        } else if (type === 'success') {
-            this.showSuccess(message);
-        } else {
-            this.showError(message);
-        }
-    }
-
-    formatPrice(price) {
-        return new Intl.NumberFormat('ru-RU').format(price || 0);
-    }
-
-
-
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    formatJSONForTextarea(data) {
-        if (!data) return '';
-        
-        if (typeof data === 'string') {
-            try {
-                data = JSON.parse(data);
-            } catch (e) {
-                return data;
-            }
-        }
-        
-        if (Array.isArray(data)) {
-            return JSON.stringify(data, null, 2);
-        }
-        
-        return '';
-    }
-
-    async loadSectionData(section) {
-        switch(section) {
-            case 'dashboard': await this.loadDashboardData(); break;
-            case 'components': 
-                await this.loadComponents(); 
-                break;
-            case 'users': 
-                await this.loadUsers(); 
-                break;
-            case 'builds': 
-                await this.loadBuilds();
-                break;
-        }
-    }
-
-    countComponents(components) {
-        if (!components) return '0 компонентов';
-        
-        let count = 0;
-        Object.values(components).forEach(comp => {
-            if (Array.isArray(comp)) {
-                count += comp.length;
-            } else if (comp && typeof comp === 'object') {
-                count++;
-            }
-        });
-        
-        const lastDigit = count % 10;
-        const lastTwoDigits = count % 100;
-        
-        let word = 'компонентов';
-        if (lastDigit === 1 && lastTwoDigits !== 11) word = 'компонент';
-        if (lastDigit >= 2 && lastDigit <= 4 && (lastTwoDigits < 10 || lastTwoDigits >= 20)) word = 'компонента';
-        
-        return `${count} ${word}`;
-    }
-    
-}
-
-
-
-document.addEventListener('DOMContentLoaded', () => {
-    window.adminPanel = new AdminPanel();
-});
+document.addEventListener('DOMContentLoaded', () => { window.AdminPanel = AdminPanel; AdminPanel.init(); });

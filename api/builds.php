@@ -1,606 +1,332 @@
 <?php
-session_start();
-header("Access-Control-Allow-Origin: *");
-header("Content-Type: application/json; charset=UTF-8");
-header("Access-Control-Allow-Methods: POST, GET");
-header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
+declare(strict_types=1);
 
-include_once '../config/database.php';
+require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../config/database.php';
 
-$database = new Database();
-$db = $database->getConnection();
+header('Content-Type: application/json; charset=utf-8');
+set_cors_headers();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-$action = $_GET['action'] ?? '';
-$input = file_get_contents("php://input");
-$data = json_decode($input, true);
+$db = (new Database())->connect();
+$action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_SPECIAL_CHARS) ?? '';
+$method = $_SERVER['REQUEST_METHOD'];
+$input = get_json_input();
 
+$public_actions = ['get_public', 'like'];
 
-function isBuildEmpty($components) {
-    if (!$components) return true;
+if (!in_array($action, $public_actions, true)) {
+    if (empty($_SESSION['user_id'])) {
+        send_response(false, 'Требуется авторизация', 401);
+    }
+}
+
+$user_id = isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : 0;
+
+switch ($action) {
+    case 'save':
+        if ($method !== 'POST') send_response(false, 'Метод не разрешён', 405);
+        handle_save_build($db, $user_id, $input);
+        break;
+
+    case 'delete':
+        if ($method !== 'POST') send_response(false, 'Метод не разрешён', 405);
+        handle_delete_build($db, $user_id, $input);
+        break;
+
+    case 'update':
+        if ($method !== 'POST') send_response(false, 'Метод не разрешён', 405);
+        handle_update_build($db, $user_id, $input);
+        break;
+
+    case 'get_builds':
+        handle_get_builds($db, $user_id);
+        break;
+
+    case 'get_public':
+        handle_get_public_builds($db);
+        break;
+
+    case 'toggle_public':
+        if ($method !== 'POST') send_response(false, 'Метод не разрешён', 405);
+        handle_toggle_public($db, $user_id, $input);
+        break;
+
+    case 'like':
+        if ($method !== 'POST') send_response(false, 'Метод не разрешён', 405);
+        handle_like_build($db, $user_id, $input);
+        break;
+
+    case 'stats':
+        handle_get_stats($db, $user_id);
+        break;
+
+    default:
+        send_response(false, 'Неизвестное действие', 400);
+}
+
+function handle_save_build(PDO $db, int $user_id, array $input): void
+{
+    $components = $input['components'] ?? [];
+
+    if (is_build_empty($components)) {
+        send_response(false, 'Сборка пустая, нужно выбрать компоненты', 400);
+    }
+
+    $name = !empty($input['name'])
+        ? htmlspecialchars(trim($input['name']))
+        : 'Моя сборка ' . date('d.m.Y H:i');
+
+    $total_price = (float) ($input['total_price'] ?? 0);
+    $components_json = json_encode($components, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    $stmt = $db->prepare(
+        'INSERT INTO user_builds (user_id, name, total_price, compatibility_data, created_at, updated_at)
+         VALUES (:user_id, :name, :price, :components, NOW(), NOW())'
+    );
+    $stmt->execute([
+        ':user_id' => $user_id,
+        ':name' => $name,
+        ':price' => $total_price,
+        ':components' => $components_json,
+    ]);
+
+    send_response(true, 'Сборка сохранена', 201, [
+        'build_id' => (int) $db->lastInsertId(),
+        'name' => $name,
+        'total_price' => $total_price,
+    ]);
+}
+
+function handle_delete_build(PDO $db, int $user_id, array $input): void
+{
+    $build_id = (int) ($input['id'] ?? 0);
+
+    if (!$build_id) {
+        send_response(false, 'Не указан ID сборки', 400);
+    }
+
+    $is_admin = ($_SESSION['role'] ?? '') === 'admin';
+    $query = 'DELETE FROM user_builds WHERE id = :id';
+    $params = [':id' => $build_id];
+
+    if (!$is_admin) {
+        $query .= ' AND user_id = :user_id';
+        $params[':user_id'] = $user_id;
+    }
+
+    $stmt = $db->prepare($query);
+    $stmt->execute($params);
+
+    if ($stmt->rowCount() === 0) {
+        send_response(false, 'Сборка не найдена или нет доступа', 404);
+    }
+
+    send_response(true, 'Сборка удалена', 200);
+}
+
+function handle_update_build(PDO $db, int $user_id, array $input): void
+{
+    $build_id = (int) ($input['id'] ?? 0);
+
+    if (!$build_id) {
+        send_response(false, 'Не указан ID сборки', 400);
+    }
+
+    $check = $db->prepare('SELECT id FROM user_builds WHERE id = :id AND user_id = :user_id LIMIT 1');
+    $check->execute([':id' => $build_id, ':user_id' => $user_id]);
+
+    if ($check->rowCount() === 0) {
+        send_response(false, 'Сборка не найдена или нет доступа', 404);
+    }
+
+    $fields = [];
+    $params = [];
+
+    if (isset($input['name'])) {
+        $fields[] = 'name = :name';
+        $params[':name'] = htmlspecialchars(trim($input['name']));
+    }
+
+    if (isset($input['total_price'])) {
+        $fields[] = 'total_price = :price';
+        $params[':price'] = (float) $input['total_price'];
+    }
+
+    if (isset($input['components'])) {
+        $fields[] = 'compatibility_data = :components';
+        $params[':components'] = json_encode($input['components'], JSON_UNESCAPED_UNICODE);
+    }
+
+    if (empty($fields)) {
+        send_response(false, 'Нет данных для обновления', 400);
+    }
+
+    $fields[] = 'updated_at = NOW()';
+    $params[':id'] = $build_id;
+
+    $query = 'UPDATE user_builds SET ' . implode(', ', $fields) . ' WHERE id = :id';
+    $db->prepare($query)->execute($params);
+
+    send_response(true, 'Сборка обновлена', 200);
+}
+
+function handle_get_builds(PDO $db, int $user_id): void
+{
+    $is_admin = ($_SESSION['role'] ?? '') === 'admin';
     
+    $requested_user_id = (int) filter_input(INPUT_GET, 'user_id', FILTER_VALIDATE_INT);
+    
+    if ($requested_user_id > 0) {
+        $stmt = $db->prepare(
+            'SELECT ub.*, u.username FROM user_builds ub
+             LEFT JOIN users u ON ub.user_id = u.id
+             WHERE ub.user_id = :user_id
+             ORDER BY ub.created_at DESC'
+        );
+        $stmt->execute([':user_id' => $requested_user_id]);
+    } 
+    elseif ($is_admin) {
+        $stmt = $db->query(
+            'SELECT ub.*, u.username FROM user_builds ub
+             LEFT JOIN users u ON ub.user_id = u.id
+             ORDER BY ub.created_at DESC'
+        );
+    } 
+    else {
+        $stmt = $db->prepare(
+            'SELECT ub.*, u.username FROM user_builds ub
+             LEFT JOIN users u ON ub.user_id = u.id
+             WHERE ub.user_id = :user_id
+             ORDER BY ub.created_at DESC'
+        );
+        $stmt->execute([':user_id' => $user_id]);
+    }
+
+    $builds = $stmt->fetchAll();
+
+    foreach ($builds as &$build) {
+        $build['components'] = !empty($build['compatibility_data'])
+            ? json_decode($build['compatibility_data'], true) ?: []
+            : [];
+    }
+
+    send_response(true, '', 200, [
+        'builds' => $builds,
+        'user_is_admin' => $is_admin,
+    ]);
+}
+
+function handle_get_public_builds(PDO $db): void
+{
+    $stmt = $db->query(
+        'SELECT b.*, u.username FROM user_builds b
+         LEFT JOIN users u ON b.user_id = u.id
+         WHERE b.is_public = 1
+         ORDER BY b.likes DESC, b.created_at DESC
+         LIMIT 10'
+    );
+
+    $builds = $stmt->fetchAll();
+
+    send_response(true, '', 200, ['builds' => $builds]);
+}
+
+function handle_toggle_public(PDO $db, int $user_id, array $input): void
+{
+    $build_id = (int) ($input['id'] ?? 0);
+    $is_public = (int) ($input['is_public'] ?? 0);
+
+    $stmt = $db->prepare('SELECT id FROM user_builds WHERE id = :id AND user_id = :user_id LIMIT 1');
+    $stmt->execute([':id' => $build_id, ':user_id' => $user_id]);
+
+    if ($stmt->rowCount() === 0) {
+        send_response(false, 'Нет доступа', 403);
+    }
+
+    $db->prepare('UPDATE user_builds SET is_public = :public WHERE id = :id')
+       ->execute([':public' => $is_public, ':id' => $build_id]);
+
+    send_response(true, 'Статус изменён', 200);
+}
+
+function handle_like_build(PDO $db, int $user_id, array $input): void
+{
+    if ($user_id === 0) {
+        send_response(false, 'Чтобы оценить сборку, войдите в систему', 401);
+    }
+
+    $build_id = (int) ($input['id'] ?? 0);
+
+    $stmt = $db->prepare('SELECT liked_user, likes FROM user_builds WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $build_id]);
+    $row = $stmt->fetch();
+
+    if (!$row) {
+        send_response(false, 'Сборка не найдена', 404);
+    }
+
+    $liked_users = json_decode($row['liked_user'] ?? '[]', true) ?: [];
+
+    if (in_array($user_id, $liked_users, true)) {
+        send_response(false, 'Вы уже оценили эту сборку', 409);
+    }
+
+    $liked_users[] = $user_id;
+    $new_likes = (int) $row['likes'] + 1;
+
+    $db->prepare('UPDATE user_builds SET likes = :likes, liked_user = :users WHERE id = :id')
+       ->execute([
+           ':likes' => $new_likes,
+           ':users' => json_encode($liked_users),
+           ':id' => $build_id,
+       ]);
+
+    send_response(true, '', 200, ['likes' => $new_likes]);
+}
+
+function handle_get_stats(PDO $db, int $user_id): void
+{
+    $total_stmt = $db->prepare('SELECT COUNT(*) FROM user_builds WHERE user_id = :user_id');
+    $total_stmt->execute([':user_id' => $user_id]);
+    $total = (int) $total_stmt->fetchColumn();
+
+    $price_stmt = $db->prepare('SELECT COALESCE(SUM(total_price), 0) FROM user_builds WHERE user_id = :user_id');
+    $price_stmt->execute([':user_id' => $user_id]);
+    $total_price = (float) $price_stmt->fetchColumn();
+
+    $last_stmt = $db->prepare(
+        'SELECT name, total_price, created_at FROM user_builds
+         WHERE user_id = :user_id ORDER BY created_at DESC LIMIT 1'
+    );
+    $last_stmt->execute([':user_id' => $user_id]);
+    $last_build = $last_stmt->fetch();
+
+    send_response(true, '', 200, [
+        'stats' => [
+            'total_builds' => $total,
+            'total_price' => $total_price,
+            'last_build' => $last_build ?: null,
+        ],
+    ]);
+}
+
+function is_build_empty(array $components): bool
+{
+    if (empty($components)) {
+        return true;
+    }
+
     foreach ($components as $type => $component) {
-        if ($type === 'storages') {
-            if (is_array($component) && count($component) > 0) {
-                return false;
-            }
-        } elseif (!empty($component)) {
+        if ($type === 'storages' && is_array($component) && count($component) > 0) {
+            return false;
+        }
+        if (!empty($component)) {
             return false;
         }
     }
+
     return true;
 }
-
-function getCategoryName($componentType) {
-    $categoryNames = [
-        'cpus' => 'Процессоры',
-        'motherboards' => 'Материнские платы',
-        'rams' => 'Оперативная память',
-        'gpus' => 'Видеокарты',
-        'storages' => 'Накопители',
-        'psus' => 'Блоки питания',
-        'cases' => 'Корпуса',
-        'coolers' => 'Охлаждение'
-    ];
-    return $categoryNames[$componentType] ?? $componentType;
-}
-
-
-function getFullComponentData($componentId, $componentType, $db) {
-
-    if (!$componentId || !$componentType) {
-        return null;
-    }
-    
-    try {
-        $tableMap = [
-            'cpus' => 'cpus',
-            'motherboards' => 'motherboards',
-            'rams' => 'rams',
-            'gpus' => 'gpus',
-            'storages' => 'storages',
-            'psus' => 'psus',
-            'cases' => 'cases',
-            'coolers' => 'coolers'
-        ];
-        
-        $tableName = $tableMap[$componentType] ?? null;
-        
-        if (!$tableName) {
-            return null;
-        }
-             
-        $checkTable = $db->query("SHOW TABLES LIKE '$tableName'");
-        if ($checkTable->rowCount() === 0) {
-            return null;
-        }
-        
-        $checkQuery = "SELECT COUNT(*) as count FROM $tableName WHERE id = ?";
-        $checkStmt = $db->prepare($checkQuery);
-        $checkStmt->execute([$componentId]);
-        $count = $checkStmt->fetch(PDO::FETCH_ASSOC)['count'];
-          
-        if ($count == 0) {
-            return null;
-        }
-        
-        $query = "SELECT * FROM $tableName WHERE id = ?";
-        $stmt = $db->prepare($query);
-        $stmt->execute([$componentId]);
-        $component = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($component) {
-            $component['category_slug'] = $componentType;
-            $component['category_name'] = getCategoryName($componentType);
-            
-            if (isset($component['critical_specs']) && is_string($component['critical_specs'])) {
-                $decoded = json_decode($component['critical_specs'], true);
-                if ($decoded !== null) {
-                    $component['critical_specs'] = $decoded;
-                }
-            }
-            
-            if (isset($component['compatibility_flags']) && is_string($component['compatibility_flags'])) {
-                $decoded = json_decode($component['compatibility_flags'], true);
-                if ($decoded !== null) {
-                    $component['compatibility_flags'] = $decoded;
-                }
-            }
-            
-            return $component;
-        }
-        return null;
-        
-    } catch (Exception $e) {
-        return null;
-    }
-}
-
-if ($action === 'save') {
-    if (!isset($_SESSION['user_id'])) {
-        http_response_code(401);
-        echo json_encode([
-            "success" => false, 
-            "message" => "Необходима авторизация"
-        ]);
-        exit;
-    }
-
-    if (!$data) {
-        http_response_code(400);
-        echo json_encode([
-            "success" => false, 
-            "message" => "Нет данных для сохранения"
-        ]);
-        exit;
-    }
-
-    if (empty($data['components']) || isBuildEmpty($data['components'])) {
-        http_response_code(400);
-        echo json_encode([
-            "success" => false, 
-            "message" => "Сборка пустая, нужно выбрать 3 компонента"
-        ]);
-        exit;
-    }
-
-    try {
-        $db->beginTransaction();
-
-        $buildName = isset($data['name']) && !empty($data['name']) 
-            ? htmlspecialchars($data['name']) 
-            : "Моя сборка " . date('d.m.Y H:i');
-        
-        $totalPrice = isset($data['total_price']) ? floatval($data['total_price']) : 0;
-        
-        $componentsForSave = [];
-        foreach ($data['components'] as $type => $component) {
-            if (!$component || (is_array($component) && empty($component))) {
-                continue;
-            }
-            
-            if ($type === 'storages' && is_array($component)) {
-                $componentsForSave[$type] = [];
-                foreach ($component as $item) {
-                    if (is_array($item)) {
-                        $storageData = [
-                            'id' => $item['id'] ?? 0,
-                            'name' => $item['name'] ?? 'Накопитель',
-                            'price' => $item['price'] ?? 0
-                        ];
-                        
-                        if (isset($item['image'])) {
-                            $storageData['image'] = $item['image'];
-                        }
-                        
-                        $componentsForSave[$type][] = $storageData;
-                    }
-                }
-            } elseif (is_array($component)) {
-                $componentData = [
-                    'id' => $component['id'] ?? 0,
-                    'name' => $component['name'] ?? 'Компонент',
-                    'price' => $component['price'] ?? 0
-                ];
-                
-                if (isset($component['image'])) {
-                    $componentData['image'] = $component['image'];
-                }
-                
-                $componentsForSave[$type] = $componentData;
-            }
-        }
-        
-        $compData = json_encode($componentsForSave, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-        
-        $queryBuild = "INSERT INTO user_builds 
-                       SET user_id = :user_id, 
-                           name = :name, 
-                           total_price = :total_price, 
-                           compatibility_data = :comp_data,
-                           created_at = NOW(),
-                           updated_at = NOW()";
-
-        $stmtBuild = $db->prepare($queryBuild);
-        $stmtBuild->bindParam(":user_id", $_SESSION['user_id']);
-        $stmtBuild->bindParam(":name", $buildName);
-        $stmtBuild->bindParam(":total_price", $totalPrice);
-        $stmtBuild->bindParam(":comp_data", $compData);
-        $stmtBuild->execute();
-        
-        $buildId = $db->lastInsertId();
-
-        $db->commit();
-        
-        echo json_encode([
-            "success" => true, 
-            "message" => "Сборка успешно сохранена", 
-            "build_id" => $buildId,
-            "name" => $buildName,
-            "total_price" => $totalPrice
-        ]);
-
-    } catch (Exception $e) {
-        $db->rollBack();
-        http_response_code(500);
-        echo json_encode([
-            "success" => false, 
-            "message" => "Ошибка сохранения сборки"
-        ]);
-    }
-    exit;
-}
-
-if ($action === 'delete') {
-    if (!isset($_SESSION['user_id'])) {
-        http_response_code(401);
-        echo json_encode([
-            'success' => false, 
-            'message' => 'Войдите в систему'
-        ]);
-        exit;
-    }
-    
-    $id = isset($data['id']) ? intval($data['id']) : 0;
-    
-    if (!$id) {
-        http_response_code(400);
-        echo json_encode([
-            'success' => false, 
-            'message' => 'Не указан ID сборки'
-        ]);
-        exit;
-    }
-    
-    try {
-        $db->beginTransaction();
-        
-        $query = "DELETE FROM user_builds WHERE id = ? AND user_id = ?";
-        $stmt = $db->prepare($query);
-        $stmt->execute([$id, $_SESSION['user_id']]);
-        
-        $deleted = $stmt->rowCount() > 0;
-        
-        $db->commit();
-        
-        if ($deleted) {
-            echo json_encode([
-                'success' => true, 
-                'message' => 'Сборка успешно удалена'
-            ]);
-        } else {
-            echo json_encode([
-                'success' => false, 
-                'message' => 'Сборка не найдена или нет прав доступа'
-            ]);
-        }
-        
-    } catch (Exception $e) {
-        $db->rollBack();
-        http_response_code(500);
-        echo json_encode([
-            'success' => false, 
-            'message' => 'Ошибка удаления сборки'
-        ]);
-    }
-    exit;
-}
-
-if ($action === 'get_component_single') {
-    try {
-        if (!isset($_SESSION['user_id'])) {
-            http_response_code(401);
-            echo json_encode(['success' => false, 'message' => 'Требуется авторизация']);
-            exit;
-        }
-        
-        $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-        $type = isset($_GET['type']) ? $_GET['type'] : '';
-        
-        if (!$id || !$type) {
-            http_response_code(400);
-            echo json_encode(['success' => false, 'message' => 'Не указаны параметры']);
-            exit;
-        }
-        
-        $tableMap = [
-            'cpus' => 'cpus',
-            'motherboards' => 'motherboards',
-            'rams' => 'rams',
-            'gpus' => 'gpus',
-            'storages' => 'storages',
-            'psus' => 'psus',
-            'cases' => 'cases',
-            'coolers' => 'coolers'
-        ];
-        
-        $tableName = $tableMap[$type] ?? null;
-        if (!$tableName) {
-            echo json_encode(['success' => false, 'message' => 'Неверный тип компонента']);
-            exit;
-        }
-        
-        $query = "SELECT * FROM $tableName WHERE id = ?";
-        $stmt = $db->prepare($query);
-        $stmt->execute([$id]);
-        $component = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($component) {
-            echo json_encode([
-                'success' => true,
-                'component' => $component
-            ]);
-        } else {
-            echo json_encode([
-                'success' => false,
-                'message' => 'Компонент не найден'
-            ]);
-        }
-        
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'message' => 'Ошибка получения компонента'
-        ]);
-    }
-    exit;
-}
-if ($action === 'get_builds') {
-    try {
-        if (!isset($_SESSION['user_id'])) {
-            http_response_code(401);
-            echo json_encode(['success' => false, 'message' => 'Требуется авторизация']);
-            exit;
-        }
-        
-        $userQuery = "SELECT role FROM users WHERE id = ?";
-        $userStmt = $db->prepare($userQuery);
-        $userStmt->execute([$_SESSION['user_id']]);
-        $user = $userStmt->fetch(PDO::FETCH_ASSOC);
-        
-        if (!$user) {
-            http_response_code(401);
-            echo json_encode(['success' => false, 'message' => 'Пользователь не найден']);
-            exit;
-        }
-        
-        $isAdmin = ($user['role'] === 'admin');
-        
-        if ($isAdmin) {
-            $query = "SELECT ub.*, u.username 
-                      FROM user_builds ub 
-                      LEFT JOIN users u ON ub.user_id = u.id 
-                      WHERE ub.user_id = ?
-                      ORDER BY ub.created_at DESC";
-            $params = [];
-        } else {
-            $query = "SELECT ub.*, u.username 
-                      FROM user_builds ub 
-                      LEFT JOIN users u ON ub.user_id = u.id 
-                      WHERE ub.user_id = ?
-                      ORDER BY ub.created_at DESC";
-            $params = [$_SESSION['user_id']];
-        }
-        
-        $stmt = $db->prepare($query);
-        $stmt->execute($params);
-        $builds = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        foreach ($builds as &$build) {
-            if (!empty($build['compatibility_data'])) {
-                $decodedData = json_decode($build['compatibility_data'], true);
-                if ($decodedData !== null) {
-                    $fullComponents = [];
-                    foreach ($decodedData as $type => $componentData) {
-                        if ($type === 'storages' && is_array($componentData)) {
-                            $fullComponents[$type] = [];
-                            foreach ($componentData as $storage) {
-                                $fullStorage = getFullComponentData($storage['id'], 'storages', $db);
-                                if ($fullStorage) {
-                                    $fullComponents[$type][] = $fullStorage;
-                                }
-                            }
-                        } else {
-                            $fullComponent = getFullComponentData($componentData['id'], $type, $db);
-                            if ($fullComponent) {
-                                $fullComponents[$type] = $fullComponent;
-                            }
-                        }
-                    }
-                    $build['components'] = $fullComponents;
-                } else {
-                    $build['components'] = [];
-                }
-            } else {
-                $build['components'] = [];
-            }
-        }
-        
-        echo json_encode([
-            'success' => true,
-            'builds' => $builds,
-            'user_is_admin' => $isAdmin  
-        ]);
-        
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'message' => 'Ошибка получения сборок'
-        ]);
-    }
-    exit;
-}
-
-if ($action === 'update') {
-    if (!isset($_SESSION['user_id'])) {
-        http_response_code(401);
-        echo json_encode(['success' => false, 'message' => 'Войдите в систему']);
-        exit;
-    }
-    
-    if (!$data) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Нет данных для обновления']);
-        exit;
-    }
-    
-    $id = isset($data['id']) ? intval($data['id']) : 0;
-    
-    if (!$id) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Не указан ID сборки']);
-        exit;
-    }
-    
-    try {
-        $db->beginTransaction();
-
-        $checkQuery = "SELECT id FROM user_builds WHERE id = ? AND user_id = ?";
-        $checkStmt = $db->prepare($checkQuery);
-        $checkStmt->execute([$id, $_SESSION['user_id']]);
-        
-        if ($checkStmt->rowCount() === 0) {
-            $db->rollBack();
-            echo json_encode([
-                'success' => false, 
-                'message' => 'Сборка не найдена или нет прав доступа'
-            ]);
-            exit;
-        }
-        
-
-        $updateFields = [];
-        $updateParams = [];
-        
-        if (isset($data['name'])) {
-            $updateFields[] = "name = ?";
-            $updateParams[] = htmlspecialchars($data['name']);
-        }
-        
-        if (isset($data['total_price'])) {
-            $updateFields[] = "total_price = ?";
-            $updateParams[] = floatval($data['total_price']);
-        }
-        
-        if (isset($data['components'])) {
-            $componentsJson = json_encode($data['components'], JSON_UNESCAPED_UNICODE);
-            $updateFields[] = "compatibility_data = ?";
-            $updateParams[] = $componentsJson;
-        }
-        
-        $updateFields[] = "updated_at = NOW()";
-        
-        if (empty($updateFields)) {
-            $db->rollBack();
-            echo json_encode(['success' => false, 'message' => 'Нет данных для обновления']);
-            exit;
-        }
-        
-
-        $updateQuery = "UPDATE user_builds SET " . implode(", ", $updateFields) . " WHERE id = ?";
-        $updateParams[] = $id;
-        
-        $updateStmt = $db->prepare($updateQuery);
-        $updateStmt->execute($updateParams);
-        
-        $db->commit();
-        
-        echo json_encode([
-            'success' => true, 
-            'message' => 'Сборка обновлена'
-        ]);
-        
-    } catch (Exception $e) {
-        $db->rollBack();
-        http_response_code(500);
-        echo json_encode([
-            'success' => false, 
-            'message' => 'Ошибка обновления сборки'
-        ]);
-    }
-    exit;
-}
-
-if ($action === 'stats') {
-    if (!isset($_SESSION['user_id'])) {
-        http_response_code(401);
-        echo json_encode(['success' => false, 'message' => 'Войдите в систему']);
-        exit;
-    }
-    
-    try {
-        $totalQuery = "SELECT COUNT(*) as total FROM user_builds WHERE user_id = ?";
-        $totalStmt = $db->prepare($totalQuery);
-        $totalStmt->execute([$_SESSION['user_id']]);
-        $total = $totalStmt->fetch(PDO::FETCH_ASSOC)['total'];
-        
-        $priceQuery = "SELECT COALESCE(SUM(total_price), 0) as total_price FROM user_builds WHERE user_id = ?";
-        $priceStmt = $db->prepare($priceQuery);
-        $priceStmt->execute([$_SESSION['user_id']]);
-        $totalPrice = $priceStmt->fetch(PDO::FETCH_ASSOC)['total_price'];
-        
-        $lastQuery = "SELECT name, total_price, created_at 
-                      FROM user_builds 
-                      WHERE user_id = ? 
-                      ORDER BY created_at DESC 
-                      LIMIT 1";
-        $lastStmt = $db->prepare($lastQuery);
-        $lastStmt->execute([$_SESSION['user_id']]);
-        $lastBuild = $lastStmt->fetch(PDO::FETCH_ASSOC);
-        
-        echo json_encode([
-            'success' => true,
-            'stats' => [
-                'total_builds' => $total,
-                'total_price' => floatval($totalPrice),
-                'last_build' => $lastBuild
-            ]
-        ]);
-        
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode([
-            'success' => false, 
-            'message' => 'статистика не загрузилась'
-        ]);
-    }
-    exit;
-}
-
-
-if ($_SERVER['REQUEST_METHOD'] == 'GET' && $action == 'list') {
-    if (!isset($_SESSION['user_id'])) {
-        echo json_encode(["success" => false, "builds" => [], "message" => "Не авторизован"]);
-        exit;
-    }
-
-    try {
-        $query = "SELECT * FROM user_builds WHERE user_id = ? ORDER BY created_at DESC";
-        $stmt = $db->prepare($query);
-        $stmt->execute([$_SESSION['user_id']]);
-        $builds = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        echo json_encode(["success" => true, "builds" => $builds]);
-    } catch (Exception $e) {
-        echo json_encode(["success" => false, "builds" => [], "message" => $e->getMessage()]);
-    }
-    exit;
-}
-
-
-http_response_code(404);
-echo json_encode([
-    'success' => false, 
-    'message' => 'Неизвестное действие',
-    'available_actions' => [
-        'get_user_builds', 
-        'save', 
-        'delete', 
-        'get_build', 
-        'update', 
-        'stats', 
-        'list'
-    ]
-]);
-?>

@@ -1,659 +1,462 @@
-class DataManager {
-    constructor() {
-        this.componentDetailsCache = new Map();
-        this.compatibilityRules = this.get_comp_rules();
-        this.API_BASE_URL = 'api/'; 
-        
-        this.categoryMapping = {
-            'cpus': 'cpus',
-            'motherboards': 'motherboards',
-            'rams': 'rams',
-            'gpus': 'gpus',
-            'storages': 'storages',
-            'psus': 'psus',
-            'cases': 'cases',
-            'coolers': 'coolers'
-        };
-        
-        this.allComponentsCache = new Map();
-    }
+'use strict';
 
-    getCachedComponents() {
-        return this.componentsData;
-    }
+const DataManager = (() => {
+    const API = 'api/';
+    const _details_cache = new Map();
+    const _all_cache = new Map();
 
-    async getComponentsPage(componentType, page = 1, filters = {}) {
+    const CATEGORY_MAP = Object.freeze({
+        cpus: 'cpus', motherboards: 'motherboards', rams: 'rams',
+        gpus: 'gpus', storages: 'storages', psus: 'psus',
+        cases: 'cases', coolers: 'coolers'
+    });
+
+    const ALLOWED_FILTERS = Object.freeze({
+        cpus: ['search', 'socket'],
+        motherboards: ['search', 'socket', 'memory_type', 'form_factor'],
+        rams: ['search', 'memory_type'],
+        gpus: ['search', 'max_length'],
+        storages: ['search'],
+        psus: ['search', 'min_wattage'],
+        cases: ['search', 'form_factor', 'max_gpu_length', 'max_cpu_cooler_height'],
+        coolers: ['search', 'socket', 'tdp']
+    });
+
+    const COMPAT_RULES = Object.freeze({
+        sockets: {
+            'AM4': ['AM4'], 'LGA1700': ['LGA1700'],
+            'AM5': ['AM5'], 'LGA1200': ['LGA1200'],
+            'LGA1151': ['LGA1151'], 'TR4': ['TR4']
+        },
+        memory_types: {
+            'DDR4': ['DDR4'], 'DDR5': ['DDR5'], 'DDR3': ['DDR3']
+        },
+        form_factors: {
+            'ATX': ['ATX', 'E-ATX', 'Micro-ATX'],
+            'Micro-ATX': ['ATX', 'Micro-ATX', 'Mini-ITX'],
+            'Mini-ITX': ['ATX', 'Micro-ATX', 'Mini-ITX']
+        }
+    });
+
+    const getComponentsPage = async (type, page = 1, filters = {}) => {
+        const api_cat = CATEGORY_MAP[type] || type.replace(/s$/, '');
+        const params = new URLSearchParams();
+        params.append('category', api_cat);
+        params.append('page', String(page));
+        params.append('limit', '5');
+        params.append('is_active', '1');
+
+        if (filters.search) params.append('search', filters.search);
+        if (_can_filter(type, 'socket', filters.socket)) params.append('socket', filters.socket);
+        if (_can_filter(type, 'memory_type', filters.memory_type)) params.append('memory_type', filters.memory_type);
+        if (_can_filter(type, 'min_wattage', filters.min_wattage)) params.append('min_wattage', filters.min_wattage);
+        if (_can_filter(type, 'form_factor', filters.form_factor)) params.append('form_factor', filters.form_factor);
+        if (_can_filter(type, 'max_gpu_length', filters.max_gpu_length)) params.append('max_gpu_length', filters.max_gpu_length);
+        if (_can_filter(type, 'max_cpu_cooler_height', filters.max_cpu_cooler_height)) params.append('max_cpu_cooler_height', filters.max_cpu_cooler_height);
+
         try {
-         
-            let apiCategory = this.categoryMapping[componentType];
-            
-            if (!apiCategory) {
-                apiCategory = componentType.replace(/s$/, '');
+            const res = await fetch(`api/components.php?${params.toString()}`);
+            const text = await res.text();
+
+            if (text.trim().startsWith('<')) {
+                throw new Error('Сервер вернул HTML вместо JSON');
             }
-            
-            const params = new URLSearchParams();
-            params.append('category', apiCategory);
-            params.append('page', page);
-            params.append('limit', 5);
-            
-            if (this.shouldApplyFilter(componentType, 'search', filters.search)) {
-                params.append('search', filters.search);
-            }
-            
-            if (this.shouldApplyFilter(componentType, 'socket', filters.socket)) {
-                params.append('socket', filters.socket);
-            }
-            
-            if (this.shouldApplyFilter(componentType, 'memory_type', filters.memory_type)) {
-                params.append('memory_type', filters.memory_type);
-            }
-            
-            if (this.shouldApplyFilter(componentType, 'min_wattage', filters.min_wattage)) {
-                params.append('min_wattage', filters.min_wattage);
-            }
-            
-            if (this.shouldApplyFilter(componentType, 'form_factor', filters.form_factor)) {
-                params.append('form_factor', filters.form_factor);
-            }
-            
-            const url = `api/components.php?${params.toString()}`;
-            
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            
+
+            const data = JSON.parse(text);
+
             let components = [];
-            let totalPages = 1;
-            let totalItems = 0;
-            
+            let total_pages = 1;
+            let total_items = 0;
+
             if (data.success && Array.isArray(data.components)) {
                 components = data.components;
-                totalPages = data.total_pages || 1;
-                totalItems = data.total_items || components.length;
-            } else if (Array.isArray(data)) {
-                components = data;
-                totalItems = data.length;
-            } else if (data.components && Array.isArray(data.components)) {
-                components = data.components;
-                totalPages = data.total_pages || 1;
-                totalItems = data.total_items || components.length;
+                total_pages = data.total_pages || 1;
+                total_items = data.total_items || components.length;
             } else if (data.success && data.data && Array.isArray(data.data)) {
                 components = data.data;
-                totalPages = data.total_pages || 1;
-                totalItems = data.total || components.length;
-            } else if (data.data && Array.isArray(data.data)) {
-                components = data.data;
-                totalPages = data.pages || 1;
-                totalItems = data.total || components.length;
-            } else {
-                components = [];
+                total_pages = data.total_pages || 1;
+                total_items = data.total_items || components.length;
+            } else if (Array.isArray(data)) {
+                components = data;
+                total_items = data.length;
+            } else if (data.components && Array.isArray(data.components)) {
+                components = data.components;
+                total_pages = data.total_pages || 1;
+                total_items = data.total_items || components.length;
             }
-                   
-            components = components.map(component => {
-                if (!component.category) {
-                    return {
-                        ...component,
-                        category: apiCategory
-                    };
-                }
-                return component;
-            });
-            
+
+            components = components.map(c => ({
+                ...c,
+                category: c.category || c.category_code || api_cat
+            }));
+
             return {
-                components: components,
+                components,
                 currentPage: page,
-                totalPages: totalPages,
-                totalItems: totalItems,
-                hasNext: page < totalPages,
+                totalPages: total_pages,
+                totalItems: total_items,
+                hasNext: page < total_pages,
                 hasPrev: page > 1,
                 itemsPerPage: 5
             };
-            
-        } catch (error) {
-            return this.getFallbackComponents(componentType, page, filters);
+        } catch (e) {
+            return {
+                components: [],
+                currentPage: page,
+                totalPages: 0,
+                totalItems: 0,
+                hasNext: false,
+                hasPrev: false,
+                itemsPerPage: 5
+            };
         }
-    }
+    };
 
-    shouldApplyFilter(componentType, filterName, filterValue) {
-        if (!filterValue) return false;
-        
-        const filterMap = {
-            'cpus': ['search'],
-            'motherboards': ['search', 'socket'],
-            'rams': ['search', 'memory_type'],
-            'gpus': ['search'],
-            'storages': ['search'],
-            'psus': ['search', 'min_wattage'],
-            'cases': ['search', 'form_factor'],
-            'coolers': ['search', 'socket']
-        };
-        
-        const allowedFilters = filterMap[componentType] || ['search'];
-        return allowedFilters.includes(filterName);
-    }
+    const _can_filter = (type, filter_name, filter_value) => {
+        if (!filter_value) return false;
+        const allowed = ALLOWED_FILTERS[type] || ['search'];
+        return allowed.includes(filter_name);
+    };
 
-    getFallbackComponents(componentType, page, filters) {
-        const testData = [];
-        
-        let filteredComponents = testData;
-        
-        if (filters.search) {
-            const searchLower = filters.search.toLowerCase();
-            filteredComponents = filteredComponents.filter(comp => 
-                comp.name.toLowerCase().includes(searchLower)
-            );
-        }
-        
-        if (filters.socket && this.shouldApplyFilter(componentType, 'socket', filters.socket)) {
-            filteredComponents = filteredComponents.filter(comp => 
-                comp.socket === filters.socket
-            );
-        }
-        
-        if (filters.memory_type && this.shouldApplyFilter(componentType, 'memory_type', filters.memory_type)) {
-            filteredComponents = filteredComponents.filter(comp => 
-                comp.memory_type === filters.memory_type || comp.type === filters.memory_type
-            );
-        }
-        
-        const startIndex = (page - 1) * 10;
-        const paginated = filteredComponents.slice(startIndex, startIndex + 10);
-        
-        return {
-            components: paginated,
-            currentPage: page,
-            totalPages: Math.ceil(filteredComponents.length / 10),
-            totalItems: filteredComponents.length,
-            hasNext: page < Math.ceil(filteredComponents.length / 10),
-            hasPrev: page > 1,
-            itemsPerPage: 10
-        };
-    }
-
-    async getComponentDetails(componentId, componentType) {
-        const cacheKey = `${componentType}_${componentId}`;
-        
-        if (this.componentDetailsCache.has(cacheKey)) {
-            return this.componentDetailsCache.get(cacheKey);
-        }
+    const getComponentDetails = async (id, type) => {
+        const key = `${type}_${id}`;
+        if (_details_cache.has(key)) return _details_cache.get(key);
 
         try {
-            const url = `${this.API_BASE_URL}components.php?id=${componentId}&category=${componentType}`;
-            
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            let component;
-            
-            if (data.success && data.component) {
-                component = data.component;
-            } else if (data.component) {
-                component = data.component;
-            } else if (data.id && data.name) {
-                component = data;
-            } else {
-                component = null;
-            }
-            
+            const res = await fetch(`${API}components.php?id=${id}&category=${type}`);
+            const text = await res.text();
+            if (text.trim().startsWith('<')) throw new Error('Сервер вернул HTML');
+            const data = JSON.parse(text);
+
+            let component = null;
+            if (data.success && data.component) component = data.component;
+            else if (data.component) component = data.component;
+            else if (data.id && data.name) component = data;
+
             if (component) {
-                this.componentDetailsCache.set(cacheKey, component);
+                _details_cache.set(key, component);
                 return component;
             }
-            
             return null;
-        } catch (error) {
+        } catch (e) {
             return null;
         }
-    }
+    };
 
-    async searchComponents(componentType, query, filters = {}) {
-        const searchFilters = {
-            ...filters,
-            search: query
-        };
-        return await this.getComponentsPage(componentType, 1, searchFilters);
-    }
+    const getCompatibilityFilters = (build) => {
+        const filters = {};
 
-    validateCompatibility(currentBuild) {
+        if (build.cpus?.socket) {
+            filters.socket = build.cpus.socket;
+        }
+
+        if (build.motherboards) {
+            if (build.motherboards.memory_type) {
+                filters.memory_type = build.motherboards.memory_type;
+            }
+            if (build.motherboards.form_factor) {
+                filters.form_factor = build.motherboards.form_factor;
+            }
+        }
+
+        if (build.cpus || build.gpus || build.rams) {
+            const total = _calc_total_wattage(build);
+            if (total > 0) {
+                filters.min_wattage = Math.ceil(total * 0.8);
+            }
+        }
+
+        return filters;
+    };
+
+    const _calc_total_wattage = (build) => {
+        let total = 0;
+
+        if (build.cpus?.wattage) {
+            total += parseInt(build.cpus.wattage) || 0;
+        } else if (build.cpus?.tdp) {
+            total += parseInt(build.cpus.tdp) || 0;
+        } else {
+            total += 65;
+        }
+
+        if (build.gpus?.wattage) {
+            total += parseInt(build.gpus.wattage) || 0;
+        } else if (build.gpus?.tdp) {
+            total += parseInt(build.gpus.tdp) || 0;
+        } else {
+            total += 150;
+        }
+
+        if (build.rams?.wattage) {
+            total += parseInt(build.rams.wattage) || 0;
+        } else {
+            total += 5;
+        }
+
+        if (build.motherboards?.wattage) {
+            total += parseInt(build.motherboards.wattage) || 0;
+        } else {
+            total += 50;
+        }
+
+        if (build.coolers?.wattage) {
+            total += parseInt(build.coolers.wattage) || 0;
+        } else if (build.coolers?.tdp) {
+            total += parseInt(build.coolers.tdp) || 0;
+        } else {
+            total += 8;
+        }
+
+        if (build.cases?.wattage) {
+            total += parseInt(build.cases.wattage) || 0;
+        } else {
+            total += 10;
+        }
+
+        if (Array.isArray(build.storages)) {
+            build.storages.forEach(s => {
+                if (s?.wattage) {
+                    total += parseInt(s.wattage) || 0;
+                } else {
+                    total += 5;
+                }
+            });
+        }
+
+        return Math.ceil(total * 1.2);
+    };
+
+    const validateCompatibility = (build) => {
         const errors = [];
         const warnings = [];
-        let compatibilityScore = 0;
-        let maxScore = 0;
+        let score = 0;
+        let max_score = 0;
 
-        const getComponentData = (comp) => {
-            if (!comp) return null;
-            return comp.component || comp;
-        };
-
-        const componentsToCheck = [
+        const check_items = [
             { type: 'cpus', name: 'Процессор', required: true },
             { type: 'motherboards', name: 'Материнская плата', required: true },
             { type: 'rams', name: 'Оперативная память', required: true },
             { type: 'gpus', name: 'Видеокарта', required: false },
-            { type: 'storages', name: 'Накопитель', required: false, isArray: true },
+            { type: 'storages', name: 'Накопитель', required: false, is_array: true },
             { type: 'psus', name: 'Блок питания', required: false },
             { type: 'cases', name: 'Корпус', required: false },
             { type: 'coolers', name: 'Охлаждение', required: false }
         ];
 
-        componentsToCheck.forEach(comp => {
-            const component = currentBuild[comp.type];
-            
-            if (comp.isArray) {
-                if (Array.isArray(component) && component.length > 0) {
-                    maxScore++;
-                    compatibilityScore++;
-                }
-            } else {
-                if (component) {
-                    maxScore++;
-                    compatibilityScore++;
-                }
-            }
+        check_items.forEach(item => {
+            const component = build[item.type];
+            if (item.is_array) {
+                if (Array.isArray(component) && component.length > 0) { max_score++; score++; }
+            } else if (component) { max_score++; score++; }
         });
 
-        if (currentBuild.cpus && currentBuild.motherboards) {
-            const cpuData = getComponentData(currentBuild.cpus);
-            const mbData = getComponentData(currentBuild.motherboards);
-            
-            const cpuSocket = cpuData?.socket;
-            const mbSocket = mbData?.socket;
-            
-            if (cpuSocket && mbSocket && cpuSocket !== mbSocket) {
+        const cpu = build.cpus;
+        const mb = build.motherboards;
+
+        if (cpu && mb) {
+            if (cpu.socket && mb.socket && cpu.socket !== mb.socket) {
                 errors.push({
                     component1: 'cpus',
                     component2: 'motherboards',
-                    message: `Процессор ${cpuData.name} (сокет ${cpuSocket}) не совместим с материнской платой ${mbData.name} (сокет ${mbSocket})`
+                    message: `Процессор ${cpu.name} (сокет ${cpu.socket}) не совместим с платой ${mb.name} (сокет ${mb.socket})`
                 });
-                compatibilityScore--;
+                score--;
             }
         }
 
-        if (currentBuild.rams && currentBuild.motherboards) {
-            const ramData = getComponentData(currentBuild.rams);
-            const mbData = getComponentData(currentBuild.motherboards);
-            
-            const ramType = ramData?.type || ramData?.memory_type;
-            const mbMemoryType = mbData?.memory_type || mbData?.memoryType;
-            
-            if (ramType && mbMemoryType && ramType !== mbMemoryType) {
+        if (build.rams && mb) {
+            const ram_type = build.rams.type || build.rams.memory_type;
+            const mb_type = mb.memory_type;
+
+            if (ram_type && mb_type && ram_type !== mb_type) {
                 errors.push({
                     component1: 'rams',
                     component2: 'motherboards',
-                    message: `Оперативная память ${ramData.name} (${ramType}) не совместима с материнской платой ${mbData.name} (${mbMemoryType})`
+                    message: `Память ${build.rams.name} (${ram_type}) не совместима с платой ${mb.name} (${mb_type})`
                 });
-                compatibilityScore--;
+                score--;
             }
         }
 
-        if (currentBuild.cases && currentBuild.motherboards) {
-            const caseData = getComponentData(currentBuild.cases);
-            const mbData = getComponentData(currentBuild.motherboards);
-            
-            const caseFormFactors = caseData?.supportedFormFactors || [];
-            const mbFormFactor = mbData?.form_factor || mbData?.formFactor;
-            
-            if (mbFormFactor && caseFormFactors.length > 0 && !caseFormFactors.includes(mbFormFactor)) {
-                errors.push({
-                    component1: 'motherboards',
-                    component2: 'cases',
-                    message: `Материнская плата ${mbData.name} (${mbFormFactor}) не поместится в корпус ${caseData.name} (поддерживает: ${caseFormFactors.join(', ')})`
-                });
-                compatibilityScore--;
-            }
-        }
+        if (build.cases && mb) {
+            const case_ff = build.cases.supported_motherboards || '';
+            const case_ffs = case_ff.toUpperCase().split(/[,|]/).map(f => f.trim());
+            const mb_ff = mb.form_factor;
 
-        if (currentBuild.storages && Array.isArray(currentBuild.storages)) {
-            currentBuild.storages.forEach((storage) => {
-                const storageData = getComponentData(storage);
-                const mbData = getComponentData(currentBuild.motherboards);
+            if (mb_ff && case_ffs.length > 0) {
+                const hierarchy = {
+                    'E-ATX': ['E-ATX', 'ATX', 'MICRO-ATX', 'MINI-ITX'],
+                    'ATX': ['ATX', 'MICRO-ATX', 'MINI-ITX'],
+                    'MICRO-ATX': ['MICRO-ATX', 'MINI-ITX'],
+                    'MINI-ITX': ['MINI-ITX']
+                };
                 
-                if (storageData?.type === 'M.2' && mbData && mbData.m2Slots === 0) {
+                let ok = false;
+                for (const f of case_ffs) {
+                    if (f === mb_ff.toUpperCase() || (hierarchy[f] && hierarchy[f].includes(mb_ff.toUpperCase()))) {
+                        ok = true;
+                        break;
+                    }
+                }
+                
+                if (!ok) {
                     errors.push({
-                        component1: 'storages',
-                        component2: 'motherboards',
-                        message: `Накопитель ${storageData.name} (M.2) требует слот M.2, но материнская плата ${mbData.name} не имеет слотов M.2`
+                        component1: 'motherboards',
+                        component2: 'cases',
+                        message: `Плата ${mb.name} (${mb_ff}) не поместится в корпус ${build.cases.name} (поддерживает: ${case_ff})`
                     });
-                    compatibilityScore--;
+                    score--;
+                }
+            }
+        }
+
+        if (Array.isArray(build.storages) && mb) {
+            const m2_slots = mb.m2_slots || 1;
+            const sata_ports = mb.sata_ports || 4;
+            let m2_count = 0;
+            let sata_count = 0;
+
+            build.storages.forEach(storage => {
+                if (storage.type?.toUpperCase().includes('M.2') || storage.type?.toUpperCase().includes('NVME')) {
+                    m2_count++;
+                } else {
+                    sata_count++;
                 }
             });
+
+            if (m2_count > m2_slots) {
+                errors.push({
+                    component1: 'storages',
+                    component2: 'motherboards',
+                    message: `Недостаточно M.2 слотов: выбрано ${m2_count}, доступно ${m2_slots}`
+                });
+                score--;
+            }
+
+            if (sata_count > sata_ports) {
+                errors.push({
+                    component1: 'storages',
+                    component2: 'motherboards',
+                    message: `Недостаточно SATA портов: выбрано ${sata_count}, доступно ${sata_ports}`
+                });
+                score--;
+            }
         }
 
-        const totalWattage = this.calculateTotalWattage(currentBuild);
-        if (currentBuild.psus) {
-            const psuData = getComponentData(currentBuild.psus);
-            if (psuData && totalWattage > psuData.wattage) {
+        const total_w = _calc_total_wattage(build);
+        if (build.psus) {
+            if (total_w > build.psus.wattage) {
                 warnings.push({
-                    message: `Мощность блока питания ${psuData.wattage}W может быть недостаточной для системы (расчетная мощность: ${totalWattage}W)`
+                    component1: 'psus',
+                    component2: 'system',
+                    message: `Мощность БП ${build.psus.wattage}W может быть недостаточной (расчетная: ${total_w}W)`
                 });
             }
         }
 
-        if (currentBuild.gpus && currentBuild.cases) {
-            const gpuData = getComponentData(currentBuild.gpus);
-            const caseData = getComponentData(currentBuild.cases);
-            
-            const gpuLength = gpuData?.length || 300;
-            const caseMaxLength = caseData?.maxGPULength || 350;
-            
-            if (gpuLength > caseMaxLength) {
+        if (build.gpus && build.cases) {
+            const gpu_len = build.gpus.length_mm || build.gpus.card_length || 300;
+            const case_max = build.cases.max_gpu_length || 350;
+
+            if (gpu_len > case_max) {
                 warnings.push({
-                    message: `Видеокарта может не поместиться в корпус. Длина видеокарты: ${gpuLength}mm, максимальная длина в корпусе: ${caseMaxLength}mm`
+                    component1: 'gpus',
+                    component2: 'cases',
+                    message: `Видеокарта может не поместиться в корпус. Длина: ${gpu_len}mm, макс. в корпусе: ${case_max}mm`
                 });
             }
         }
 
-        if (currentBuild.coolers && currentBuild.cpus) {
-            const coolerData = getComponentData(currentBuild.coolers);
-            const cpuData = getComponentData(currentBuild.cpus);
-            
-            const coolerSockets = Array.isArray(coolerData?.socket) ? 
-                coolerData.socket : [coolerData?.socket];
-            const cpuSocket = cpuData?.socket;
-            
-            if (cpuSocket && coolerSockets.length > 0 && !coolerSockets.includes(cpuSocket)) {
+        if (build.coolers && cpu) {
+            const cooler_sockets = build.coolers.socket_compatibility || '';
+            const cooler_sockets_list = cooler_sockets.toUpperCase().split(/[,|]/).map(s => s.trim());
+            const cpu_socket = cpu.socket;
+
+            if (cpu_socket && cooler_sockets_list.length > 0 && !cooler_sockets_list.includes(cpu_socket.toUpperCase())) {
                 errors.push({
                     component1: 'coolers',
                     component2: 'cpus',
-                    message: `Охлаждение ${coolerData.name} не совместимо с процессором ${cpuData.name} (сокет ${cpuSocket})`
+                    message: `Охлаждение ${build.coolers.name} не совместимо с процессором ${cpu.name} (сокет ${cpu_socket})`
                 });
-                compatibilityScore--;
+                score--;
             }
         }
 
-        const selectedCount = componentsToCheck.reduce((count, comp) => {
-            const component = currentBuild[comp.type];
-            if (comp.isArray) {
-                return count + (Array.isArray(component) && component.length > 0 ? 1 : 0);
-            } else {
-                return count + (component ? 1 : 0);
-            }
+        const selected = check_items.reduce((count, item) => {
+            const component = build[item.type];
+            if (item.is_array) return count + (Array.isArray(component) && component.length > 0 ? 1 : 0);
+            return count + (component ? 1 : 0);
         }, 0);
 
-        const progress = maxScore > 0 ? Math.max(0, (compatibilityScore / maxScore) * 100) : 0;
+        const progress = max_score > 0 ? Math.max(0, (score / max_score) * 100) : 0;
 
         return {
-            isValid: errors.length === 0,
-            hasWarnings: warnings.length > 0,
-            errors: errors,
-            warnings: warnings,
-            totalWattage: totalWattage,
-            progress: progress,
-            selectedCount: selectedCount,
-            totalCount: componentsToCheck.length
+            valid: errors.length === 0,
+            has_warnings: warnings.length > 0,
+            errors,
+            warnings,
+            total_wattage: total_w,
+            progress,
+            selected,
+            total: check_items.length
         };
-    }
+    };
 
-    calculateTotalWattage(build) {
-        let total = 0;
-        
-        const getComponentData = (comp) => comp?.component || comp;
-        
-        const cpuData = getComponentData(build.cpus);
-        const gpuData = getComponentData(build.gpus);
-        const ramData = getComponentData(build.rams);
-        
-        if (cpuData && cpuData.wattage) total += parseInt(cpuData.wattage) || 0;
-        if (gpuData && gpuData.wattage) total += parseInt(gpuData.wattage) || 0;
-        if (ramData && ramData.wattage) total += parseInt(ramData.wattage) || 0;
-        
-        if (build.storages && Array.isArray(build.storages)) {
-            build.storages.forEach(storage => {
-                const storageData = storage?.component || storage;
-                if (storageData.wattage) total += parseInt(storageData.wattage) || 0;
-            });
+    const getComponentImagePath = (component) => {
+        if (!component?.image) return 'source/icons/default_component.png';
+
+        let path = component.image;
+        let folder = _get_folder(component);
+
+        const paths = [];
+        if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('/')) {
+            paths.push(path);
         }
-        
-        return Math.ceil(total * 1.2);
-    }
-
-    getCompatibilityFilters(currentBuild) {
-        
-        const filters = {};
-        
-        const getComponentData = (comp) => {
-            if (!comp) return null;
-            return comp.component || comp;
-        };
-        
-        if (currentBuild.cpus) {
-            const cpuData = getComponentData(currentBuild.cpus);
-            if (cpuData && cpuData.socket) {
-                filters.socket = cpuData.socket;
-            }
-        }
-        
-        if (currentBuild.motherboards) {
-            const mbData = getComponentData(currentBuild.motherboards);
-            if (mbData) {
-                if (mbData.memory_type) {
-                    filters.memory_type = mbData.memory_type;
-                } else if (mbData.memoryType) {
-                    filters.memory_type = mbData.memoryType;
-                }
-                
-                if (mbData.form_factor) {
-                    filters.form_factor = mbData.form_factor;
-                }
-            }
-        }
-        
-        if (currentBuild.psus) {
-            const psuData = getComponentData(currentBuild.psus);
-            const totalWattage = this.calculateTotalWattage(currentBuild);
-            
-            if (totalWattage > 0) {
-                filters.min_wattage = Math.ceil(totalWattage * 0.8); 
-            }
-        }
-        
-        return filters;
-    }
-
-    get_comp_rules() {
-        return {
-            sockets: {
-                'AM4': ['AM4'],
-                'LGA1700': ['LGA1700'], 
-                'AM5': ['AM5'],
-                'LGA1200': ['LGA1200'],
-                'LGA1151': ['LGA1151'],
-                'TR4': ['TR4']
-            },
-            memoryTypes: {
-                'DDR4': ['DDR4'],
-                'DDR5': ['DDR5'],
-                'DDR3': ['DDR3']
-            },
-            storageTypes: {
-                'M.2': { requires: 'm2Slots', min: 1 },
-                'SATA': { requires: 'sataPorts', min: 1 },
-                'NVMe': { requires: 'm2Slots', min: 1 }
-            },
-            formFactors: {
-                'ATX': ['ATX', 'E-ATX', 'Micro-ATX'],
-                'Micro-ATX': ['ATX', 'Micro-ATX', 'Mini-ITX'],
-                'Mini-ITX': ['ATX', 'Micro-ATX', 'Mini-ITX']
-            }
-        };
-    }
-
-    getComponentTypes() {
-        return [
-            { type: 'cpus', name: 'Процессоры', icon: '⚡', slug: 'cpu' },
-            { type: 'motherboards', name: 'Мат.плата', icon: '🔌', slug: 'motherboard' },
-            { type: 'rams', name: 'Оперативная память', icon: '💾', slug: 'ram' },
-            { type: 'gpus', name: 'Видеокарты', icon: '🎮', slug: 'gpu' },
-            { type: 'storages', name: 'Накопители', icon: '💿', slug: 'storage' },
-            { type: 'psus', name: 'Блок питания', icon: '🔋', slug: 'psu' },
-            { type: 'coolers', name: 'Охлаждение', icon: '❄️', slug: 'cooler' },
-            { type: 'cases', name: 'Корпус', icon: '🖥️', slug: 'case' }
-        ];
-    }
-
-    getComponentNameByType(type) {
-        const types = this.getComponentTypes();
-        const found = types.find(t => t.type === type);
-        return found ? found.name : type;
-    }
-
-    getEmptyPageData() {
-        return {
-            components: [],
-            currentPage: 1,
-            totalPages: 0,
-            totalItems: 0,
-            hasNext: false,
-            hasPrev: false,
-            itemsPerPage: 5
-        };
-    }
-
-    clearCache() {
-        this.componentDetailsCache.clear();
-        this.allComponentsCache.clear();
-    }
-
-    async testImagePath(imagePath) {
-        if (!imagePath) return false;
-        
-        try {
-            const response = await fetch(imagePath, { method: 'HEAD' });
-            return response.ok;
-        } catch (error) {
-            return false;
-        }
-    }
-
-    getComponentImagePath(component) {
-        if (!component || !component.image) {
-            return 'source/icons/default_component.png';
-        }
-        
-        let imagePath = component.image;
-        
-        let categoryFolder = this.get_componentfolder(component);
-        
-        const possiblePaths = [];
-        
-        if (imagePath.startsWith('http://') || 
-            imagePath.startsWith('https://') || 
-            imagePath.startsWith('/')) {
-            possiblePaths.push(imagePath);
-        }
-        
-        possiblePaths.push(`source/${categoryFolder}/${imagePath}`);
-        
-        if (imagePath.includes('/')) {
-            possiblePaths.push(`source/${imagePath}`);
-            possiblePaths.push(imagePath);
+        paths.push(`source/${folder}/${path}`);
+        if (path.includes('/')) {
+            paths.push(`source/${path}`);
+            paths.push(path);
         } else {
-            possiblePaths.push(`source/images/${categoryFolder}/${imagePath}`);
-            possiblePaths.push(`images/${categoryFolder}/${imagePath}`);
-            possiblePaths.push(`components/${categoryFolder}/${imagePath}`);
+            paths.push(`source/images/${folder}/${path}`);
+            paths.push(`images/${folder}/${path}`);
+            paths.push(`components/${folder}/${path}`);
         }
-        
-        possiblePaths.push(`source/${imagePath}`);
-        
-        possiblePaths.push('source/icons/default_component.png');
-            
-        return possiblePaths[0];
-    }
+        paths.push(`source/${path}`);
+        paths.push('source/icons/default_component.png');
 
-    get_componentfolder(component) {
-        if (!component || !component.category) {
-            return 'components';
-        }
-        
-        const category = component.category.toLowerCase();
-        
-        const categoryMap = {
-            'cpu': 'cpus',
-            'процессор': 'cpus',
-            'processor': 'cpus',
-            
+        return paths[0];
+    };
+
+    const _get_folder = (component) => {
+        if (!component?.category) return 'components';
+        const cat = component.category.toLowerCase();
+        const map = {
+            'cpu': 'cpus', 'processor': 'cpus',
             'motherboard': 'motherboards',
-            'материнская плата': 'motherboards',
-            'материнская_плата': 'motherboards',
-            'mainboard': 'motherboards',
-            
-            'ram': 'rams',
-            'оперативная память': 'rams',
-            'оперативная_память': 'rams',
-            'memory': 'rams',
-            
-            'gpu': 'gpus',
-            'видеокарта': 'gpus',
-            'видео карта': 'gpus',
-            'videocard': 'gpus',
-            'graphics card': 'gpus',
-            
-            'storage': 'storages',
-            'накопитель': 'storages',
-            'жесткий диск': 'storages',
-            'ssd': 'storages',
-            'hdd': 'storages',
-            'hard drive': 'storages',
-            
-            'psu': 'psus',
-            'блок питания': 'psus',
-            'блок_питания': 'psus',
-            'power supply': 'psus',
-            
+            'ram': 'rams', 'memory': 'rams',
+            'gpu': 'gpus', 'videocard': 'gpus',
+            'storage': 'storages', 'ssd': 'storages', 'hdd': 'storages',
+            'psu': 'psus', 'power supply': 'psus',
             'case': 'cases',
-            'корпус': 'cases',
-            'computer case': 'cases',
-            
-            'cooler': 'coolers',
-            'охлаждение': 'coolers',
-            'кулер': 'coolers',
-            'cooling': 'coolers'
+            'cooler': 'coolers'
         };
-        
-        return categoryMap[category] || category;
-    }
+        return map[cat] || cat;
+    };
 
-    formatPrice(price) {
-        if (!price) return '0';
-        return new Intl.NumberFormat('ru-RU').format(price);
-    }
+    const clearCache = () => {
+        _details_cache.clear();
+        _all_cache.clear();
+    };
 
-    getComponentSpecs(component) {
-        const specs = [];
-        
-        if (component) {
-            if (component.critical_specs && Array.isArray(component.critical_specs)) {
-                specs.push(...component.critical_specs.slice(0, 3));
-            }
-            
-            if (component.socket) specs.push(`Сокет: ${component.socket}`);
-            if (component.memory_type) specs.push(`Память: ${component.memory_type}`);
-            if (component.type) specs.push(`Тип: ${component.type}`);
-            if (component.wattage) specs.push(`Мощность: ${component.wattage}W`);
-            if (component.capacity) specs.push(`Объем: ${component.capacity}`);
-            if (component.speed) specs.push(`Скорость: ${component.speed}`);
-            if (component.form_factor) specs.push(`Форм-фактор: ${component.form_factor}`);
-            if (component.efficiency) specs.push(`Эффективность: ${component.efficiency}`);
-            if (component.tdp) specs.push(`TDP: ${component.tdp}W`);
-        }
-        
-        return specs.slice(0, 3);
-    }
-}
+    return Object.freeze({
+        getComponentsPage,
+        getComponentDetails,
+        getCompatibilityFilters,
+        validateCompatibility,
+        getComponentImagePath,
+        clearCache
+    });
+})();
 
-if (typeof window !== 'undefined') {
-    window.DataManager = DataManager;
-    
-    if (!window.dataManager) {
-        window.dataManager = new DataManager();
-    }
-}
+window.DataManager = DataManager;

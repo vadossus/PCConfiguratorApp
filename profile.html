@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Профиль | PC Configurator</title>
+    
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components/header.css">
+    <link rel="stylesheet" href="css/components/profile.css">
+    <link rel="stylesheet" href="css/components/loader.css">
+    <link rel="icon" type="image/png" href="source/site_items/site_icon.png">
+</head>
+<body>
+    <div id="global-loader" class="loader hidden">
+        <div class="loader-spinner"></div>
+        <div class="loader-text">Загрузка...</div>
+    </div>
+
+    <header class="main-header">
+        <nav class="navbar">
+            <div class="nav-brand">
+                <div class="logo-icon">
+                    <img src="source/site_items/site_icon.png" alt="PC Configurator">
+                </div>
+                <h1>PC Configurator</h1>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="index.html">Конфигуратор</a></li>
+                <li><a href="srav_component.html">Сравнение</a></li>
+                <li><a href="#" id="logout-link">Выйти</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="profile-wrap">
+        <div class="sidebar">
+            <div class="menu">
+                <a href="#" class="nav-link active" data-target="tab-settings">Настройки</a>
+                <a href="#" class="nav-link" data-target="tab-favorites">Мои сборки</a>
+            </div>
+        </div>
+
+        <div class="content">
+            <div id="tab-settings" class="tab active">
+                <h2>Профиль и безопасность</h2>
+                
+                <form id="form-settings">
+                    <div class="input-group">
+                        <label for="login-input">Логин</label>
+                        <input type="text" id="login-input">
+                    </div>
+
+                    <div class="input-group">
+                        <label for="email-input">Email</label>
+                        <input type="email" id="email-input">
+                    </div>
+
+                    <hr class="divider">
+                    
+                    <div class="input-group">
+                        <label for="old-pass">Старый пароль</label>
+                        <input type="password" id="old-pass" placeholder="Введите текущий пароль">
+                    </div>
+
+                    <div class="input-group">
+                        <label for="new-pass">Новый пароль</label>
+                        <input type="password" id="new-pass" placeholder="Мин. 6 символов">
+                    </div>
+
+                    <button type="submit" class="btn-black">Сохранить изменения</button>
+                </form>
+            </div>
+
+            <div id="tab-favorites" class="tab">
+                <h2>Мои сборки</h2>
+                <div id="builds-list"></div>
+            </div>
+        </div>
+    </main>
+
+    <div id="notification-container" class="notification-container"></div>
+
+    <div id="build-settings-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Настройки сборки</h3>
+                <span class="close-button" id="close-settings">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="input-group" style="display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" id="public-build-checkbox" style="width: auto;">
+                    <label for="public-build-checkbox" style="margin: 0;">Сделать сборку публичной</label>
+                </div>
+                <button id="save-build-settings" class="btn-black" style="margin-top: 20px;">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/data-manager.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/profile.js"></script>
+</body>
+</html>
