@@ -153,8 +153,18 @@ function handle_get_users(PDO $db): void
 
 function handle_add_component(PDO $db, array $input): void
 {
-    if (empty($input['category_code']) || empty($input['name']) || !isset($input['price'])) {
-        send_response(false, 'Не все обязательные поля заполнены', 400);
+    if (empty($input['category_code'])) {
+        send_response(false, 'Не указана категория компонента. Получено: ' . json_encode(array_keys($input)), 400);
+        return;
+    }
+    
+    if (empty($input['name'])) {
+        send_response(false, 'Не указано название компонента', 400);
+        return;
+    }
+    if (!isset($input['price'])) {
+        send_response(false, 'Не указана цена компонента', 400);
+        return;
     }
 
     $table_map = [
@@ -166,6 +176,7 @@ function handle_add_component(PDO $db, array $input): void
     $target_table = $table_map[$input['category_code']] ?? null;
     if (!$target_table) {
         send_response(false, 'Неверная категория', 400);
+        return;
     }
 
     try {
@@ -182,29 +193,26 @@ function handle_add_component(PDO $db, array $input): void
             'updated_at' => date('Y-m-d H:i:s'),
         ];
 
-        $spec_fields = [
-            'socket', 'cores', 'threads', 'frequency', 'tdp', 'memory_type', 'manufacturer',
-            'chipset', 'form_factor', 'memory_slots', 'max_memory', 'm2_slots', 'sata_ports',
-            'pcie_version', 'wifi', 'type', 'capacity', 'modules', 'speed', 'cas_latency', 'rgb',
-            'gpu_chip', 'memory_size', 'recommended_psu', 'hdmi_ports', 'displayport_ports',
-            'length', 'chip_manufacturer', 'interface', 'read_speed', 'write_speed', 'wattage',
-            'efficiency', 'modular', 'pcie_connectors', 'sata_connectors', 'radiator_size',
-            'fan_size', 'noise_level', 'height', 'led', 'socket_compatibility',
-            'supported_motherboards', 'color', 'window', 'max_gpu_length',
-            'max_cpu_cooler_height', 'drive_bays', 'fan_slots', 'radiator_support',
-        ];
-
-        foreach ($spec_fields as $field) {
-            if (isset($input[$field]) && $input[$field] !== '') {
-                $insert_data[$field] = $input[$field];
+        foreach ($input as $key => $value) {
+            if (in_array($key, ['category_code', 'id', 'name', 'description', 'price', 'image', 'is_active'])) {
+                continue;
+            }
+            if ($value !== '' && $value !== null) {
+                $insert_data[$key] = $value;
             }
         }
 
-        $fields = implode(', ', array_keys($insert_data));
+        $reserved_words = ['window', 'order', 'group', 'key', 'index', 'type', 'value'];
+        $escaped_fields = array_map(function($field) use ($reserved_words) {
+            return in_array($field, $reserved_words, true) ? "`{$field}`" : $field;
+        }, array_keys($insert_data));
+
+        $fields = implode(', ', $escaped_fields);
         $placeholders = ':' . implode(', :', array_keys($insert_data));
 
         $stmt = $db->prepare("INSERT INTO {$target_table} ({$fields}) VALUES ({$placeholders})");
         $stmt->execute($insert_data);
+        
         $reference_id = (int) $db->lastInsertId();
 
         $cat_stmt = $db->prepare('SELECT id FROM component_categories WHERE code = :code LIMIT 1');
@@ -223,11 +231,10 @@ function handle_add_component(PDO $db, array $input): void
             ':updated' => date('Y-m-d H:i:s'),
         ]);
 
-        $component_id = (int) $db->lastInsertId();
         $db->exec('SET FOREIGN_KEY_CHECKS = 1');
         $db->commit();
 
-        send_response(true, 'Компонент добавлен', 201, ['id' => $component_id]);
+        send_response(true, 'Компонент добавлен', 201);
     } catch (Throwable $e) {
         $db->exec('SET FOREIGN_KEY_CHECKS = 1');
         $db->rollBack();

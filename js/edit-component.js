@@ -7,6 +7,7 @@ const EditComponent = (() => {
     let _cat = null;
     let _data = null;
 
+    // поля с характеристиками
     const FIELDS = Object.freeze({
         cpus: [
             { name: 'socket', label: 'Сокет', type: 'text' },
@@ -37,12 +38,12 @@ const EditComponent = (() => {
             { name: 'speed', label: 'Частота (МГц)', type: 'number', min: 2133 },
             { name: 'cas_latency', label: 'CAS', type: 'text' },
             { name: 'rgb', label: 'RGB', type: 'checkbox' },
-            { name: 'manufacturer', label: 'Производитель', type: 'select', options: ['Kingston', 'Corsair', 'G.Skill', 'Crucial'] }
+            { name: 'manufacturer', label: 'Производитель', type: 'select', options: ['Kingston', 'Corsair', 'G.Skill', 'Crucial', 'Adata', 'Patriot'] }
         ],
         gpus: [
             { name: 'gpu_chip', label: 'Чип', type: 'text' },
             { name: 'memory_size', label: 'Память (ГБ)', type: 'number', min: 2 },
-            { name: 'memory_type', label: 'Тип памяти', type: 'select', options: ['GDDR5', 'GDDR6', 'GDDR6X'] },
+            { name: 'memory_type', label: 'Тип памяти', type: 'select', options: ['GDDR5', 'GDDR6', 'GDDR6X', 'GDDR7', 'GDDR7X'] },
             { name: 'tdp', label: 'TDP (Вт)', type: 'number', min: 0 },
             { name: 'recommended_psu', label: 'Рек. БП (Вт)', type: 'number', min: 300 },
             { name: 'length', label: 'Длина (мм)', type: 'number', min: 150 },
@@ -56,7 +57,7 @@ const EditComponent = (() => {
             { name: 'form_factor', label: 'Форм-фактор', type: 'select', options: ['2.5"', '3.5"', 'M.2 2280'] },
             { name: 'read_speed', label: 'Чтение (МБ/с)', type: 'number', min: 0 },
             { name: 'write_speed', label: 'Запись (МБ/с)', type: 'number', min: 0 },
-            { name: 'manufacturer', label: 'Производитель', type: 'select', options: ['Samsung', 'WD', 'Kingston', 'Crucial', 'Seagate'] }
+            { name: 'manufacturer', label: 'Производитель', type: 'select', options: ['Samsung', 'WD', 'Kingston', 'Crucial', 'Seagate', 'Patriot', 'Adata', 'Corsair', 'KingSpec', 'Silicon Power', 'Team Group'] }
         ],
         psus: [
             { name: 'wattage', label: 'Мощность (Вт)', type: 'number', min: 300 },
@@ -67,12 +68,15 @@ const EditComponent = (() => {
         ],
         cases: [
             { name: 'form_factor', label: 'Тип', type: 'select', options: ['Full Tower', 'Mid Tower', 'Mini Tower', 'SFF'] },
-            { name: 'supported_motherboards', label: 'Поддержка плат', type: 'text' },
+            { name: 'supported_motherboards', label: 'Поддержка плат', type: 'select_checkbox', options: ['ATX', 'Micro-ATX', 'Mini-ITX', 'E-ATX'] },
             { name: 'color', label: 'Цвет', type: 'text' },
             { name: 'window', label: 'Окно', type: 'checkbox' },
             { name: 'max_gpu_length', label: 'Макс. GPU (мм)', type: 'number', min: 200 },
             { name: 'max_cpu_cooler_height', label: 'Макс. кулер (мм)', type: 'number', min: 100 },
-            { name: 'manufacturer', label: 'Производитель', type: 'select', options: ['NZXT', 'Fractal Design', 'DeepCool', 'Lian Li', 'Cooler Master'] }
+            { name: 'drive_bays', label: 'Отсеки для дисков', type: 'select_checkbox', options: ['2x 2.5"', '2x 3.5"', '4x 2.5"', '4x 3.5"', '2x 2.5" + 2x 3.5"'] },
+            { name: 'fan_slots', label: 'Слоты для вентиляторов', type: 'select_checkbox', options: ['1x front', '2x front', '3x front', '1x top', '2x top', '1x rear', '2x rear'] },
+            { name: 'radiator_support', label: 'Поддержка радиаторов', type: 'select_checkbox', options: ['120mm', '240mm', '280mm', '360mm', '420mm'] },
+            { name: 'manufacturer', label: 'Производитель', type: 'select', options: ['NZXT', 'Fractal Design', 'DeepCool', 'Lian Li', 'Cooler Master', 'Corsair', 'be quiet!', 'Thermaltake'] }
         ],
         coolers: [
             { name: 'type', label: 'Тип', type: 'select', options: ['Air', 'AIO'] },
@@ -84,8 +88,10 @@ const EditComponent = (() => {
         ]
     });
 
-    const LEFT_COUNT = Object.freeze({ cpus: 3, motherboards: 4, rams: 3, gpus: 4, storages: 3, psus: 3, cases: 4, coolers: 4 });
+    // положение полей с левого края и правого
+    const LEFT_COUNT = Object.freeze({ cpus: 3, motherboards: 4, rams: 3, gpus: 4, storages: 3, psus: 3, cases: 5, coolers: 4 });
 
+    // название типов компонентов
     const TYPE_NAMES = Object.freeze({
         cpus: 'Процессор', motherboards: 'Материнская плата', rams: 'Оперативная память',
         gpus: 'Видеокарта', storages: 'Накопитель', psus: 'Блок питания', cases: 'Корпус', coolers: 'Охлаждение'
@@ -104,16 +110,19 @@ const EditComponent = (() => {
         document.getElementById('global-loader')?.classList.add('hidden');
     };
 
+    // вывод алертом сообщение
     const _show_message = (msg, type = 'success') => {
         alert(type === 'error' ? `Ошибка: ${msg}` : msg);
     };
 
+    // функция без пробелов
     const _esc = (text) => {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     };
 
+    // логирование
     const _log = async (type, desc) => {
         try {
             const user = JSON.parse(localStorage.getItem('currentUser') || '{}');
@@ -125,6 +134,7 @@ const EditComponent = (() => {
         } catch (e) {}
     };
 
+    // загрузка всего
     const _load = async () => {
         _show_loader();
         try {
@@ -140,12 +150,13 @@ const EditComponent = (() => {
             if (data.success && data.component) {
                 _data = data.component;
                 if (!_cat) {
-                    _cat = _data.reference_table || _data.category_code || _data.category || '';
+                    _cat = _data.reference_table || _data.category_code;
                 }
                 _update_header();
                 _set_badge();
                 _fill_form();
                 _add_spec_fields();
+                _init_dropdowns();
             } else {
                 throw new Error(data.message || 'Компонент не найден');
             }
@@ -156,6 +167,7 @@ const EditComponent = (() => {
         _hide_loader();
     };
 
+    // подготовка компонентов
     const _prepare_new = () => {
         document.getElementById('component-name-display').textContent = 'Новый компонент';
         document.getElementById('component-id-display').textContent = '';
@@ -168,6 +180,7 @@ const EditComponent = (() => {
         _data = { category_code: _cat };
         _set_badge();
         _add_spec_fields();
+        _init_dropdowns();
     };
 
     const _set_badge = () => {
@@ -191,6 +204,7 @@ const EditComponent = (() => {
         if (comp_id) comp_id.value = _data.id || '';
     };
 
+    // заполнение полей данными
     const _fill_form = () => {
         const name = document.getElementById('name');
         const desc = document.getElementById('description');
@@ -214,6 +228,7 @@ const EditComponent = (() => {
         }
     };
 
+    // добавление полей с левой и правой стороны
     const _add_spec_fields = () => {
         const cat = _data.category_code || _cat;
         if (!cat) return;
@@ -281,10 +296,40 @@ const EditComponent = (() => {
             dynamic_fields.innerHTML = '';
         }
     };
-
+    
+    // динамическое создание полей на основе типа полей в FIELDS
     const _make_field = (field, half = false) => {
         const val = _data ? (_data[field.name] || '') : '';
         const cls = half ? 'form-group half' : 'form-group';
+
+        if (field.type === 'select_checkbox') {
+            let selected_values = val ? val.split(',').map(v => v.trim()) : [];
+            const id = 'dd_' + Date.now() + '_' + Math.random();
+            
+            let optionsHtml = '';
+            field.options.forEach(opt => {
+                optionsHtml += `
+                    <div class="dropdown-item" data-value="${opt}">
+                        <input type="checkbox" value="${opt}" ${selected_values.includes(opt) ? 'checked' : ''}>
+                        <span>${opt}</span>
+                    </div>
+                `;
+            });
+            
+            return `<div class="${cls}">
+                <label>${field.label}</label>
+                <div class="dropdown-multi" id="${id}">
+                    <div class="dropdown-btn">
+                        <span class="selected-text">${selected_values.length ? selected_values.join(', ') : 'Выберите...'}</span>
+                        <span>▼</span>
+                    </div>
+                    <div class="dropdown-menu">
+                        ${optionsHtml}
+                        <input type="hidden" name="${field.name}" value="${selected_values.join(', ')}">
+                    </div>
+                </div>
+            </div>`;
+        }
 
         if (field.type === 'select') {
             let opts = '<option value="">Выберите...</option>';
@@ -300,12 +345,45 @@ const EditComponent = (() => {
         }
         
         if (field.type === 'number') {
-            return `<div class="${cls}"><label for="${field.name}">${field.label}</label><input type="number" id="${field.name}" name="${field.name}" class="form-control" value="${val}" min="${field.min || 0}" max="${field.max || ''}" step="1" placeholder="${field.placeholder || ''}"></div>`;
+            return `<div class="${cls}"><label for="${field.name}">${field.label}</label><input type="number" id="${field.name}" name="${field.name}" class="form-control" value="${val}" min="${field.min || 0}" max="${field.max || ''}" step="1"></div>`;
         }
         
-        return `<div class="${cls}"><label for="${field.name}">${field.label}</label><input type="text" id="${field.name}" name="${field.name}" class="form-control" value="${_esc(val)}" placeholder="${field.placeholder || ''}"></div>`;
+        return `<div class="${cls}"><label for="${field.name}">${field.label}</label><input type="text" id="${field.name}" name="${field.name}" class="form-control" value="${_esc(val)}"></div>`;
     };
 
+    const _init_dropdowns = () => {
+        document.querySelectorAll('.dropdown-multi').forEach(container => {
+            const btn = container.querySelector('.dropdown-btn');
+            const menu = container.querySelector('.dropdown-menu');
+            const hidden = container.querySelector('input[type="hidden"]');
+            const textSpan = container.querySelector('.selected-text');
+            
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                menu.classList.toggle('show');
+            };
+            
+            container.querySelectorAll('.dropdown-item').forEach(item => {
+                item.onclick = (e) => {
+                    e.stopPropagation();
+                    const cb = item.querySelector('input');
+                    cb.checked = !cb.checked;
+                    
+                    const selected = Array.from(container.querySelectorAll('.dropdown-item input:checked')).map(c => c.value);
+                    hidden.value = selected.join(', ');
+                    textSpan.textContent = selected.length ? selected.join(', ') : 'Выберите...';
+                };
+            });
+        });
+        
+        document.onclick = () => {
+            document.querySelectorAll('.dropdown-menu').forEach(menu => {
+                menu.classList.remove('show');
+            });
+        };
+    };
+
+    // биндинг
     const _bind = () => {
         const form = document.getElementById('edit-component-form');
         const delete_btn = document.getElementById('delete-component-btn');
@@ -348,39 +426,46 @@ const EditComponent = (() => {
         });
     };
 
+    // TODO: аргумент category_code не передается должным образом.
     const _save = async () => {
-        const form = document.getElementById('edit-component-form');
-        const fd = new FormData(form);
-
         if (!_validate()) {
             return;
         }
         
         const data = {
-            name: fd.get('name'),
-            description: fd.get('description') || '',
-            price: parseFloat(fd.get('price')) || 0,
-            image: fd.get('image') || '',
-            is_active: fd.get('is_active') === '1' ? 1 : 0
+            name: document.getElementById('name')?.value || '',
+            description: document.getElementById('description')?.value || '',
+            price: parseFloat(document.getElementById('price')?.value) || 0,
+            image: document.getElementById('image')?.value || '',
+            is_active: document.getElementById('is_active')?.value === '1' ? 1 : 0
         };
 
-        if (_is_new) {
-            data.category_code = _cat;
-        } else {
+        const cat = _is_new ? _cat : (_data.category_code || _data.reference_table);
+        
+        data.category_code = cat;
+        if (!_is_new) {
             data.id = parseInt(_data.id);
         }
-
-        const cat = _is_new ? _cat : _data.category_code;
+        
         const fields = FIELDS[cat] || [];
 
         fields.forEach(f => {
-            const val = fd.get(f.name);
-            if (f.type === 'checkbox') {
-                data[f.name] = val === 'on' ? 1 : 0;
-            } else if (f.type === 'number') {
-                data[f.name] = val ? parseInt(val) : null;
+            if (f.type === 'select_checkbox') {
+                const hiddenInput = document.querySelector(`input[name="${f.name}"]`);
+                if (hiddenInput) {
+                    data[f.name] = hiddenInput.value;
+                }
             } else {
-                data[f.name] = val || '';
+                const el = document.querySelector(`[name="${f.name}"]`);
+                if (el) {
+                    if (f.type === 'checkbox') {
+                        data[f.name] = el.checked ? 1 : 0;
+                    } else if (f.type === 'number') {
+                        data[f.name] = el.value ? parseInt(el.value) : null;
+                    } else {
+                        data[f.name] = el.value || '';
+                    }
+                }
             }
         });
 
@@ -404,7 +489,7 @@ const EditComponent = (() => {
                 _show_message(result.message || 'Ошибка сохранения', 'error');
             }
         } catch (e) {
-            _show_message('Ошибка сохранения', 'error');
+            _show_message('Ошибка сохранения: ' + e.message, 'error');
         }
         
         _hide_loader();
@@ -435,6 +520,23 @@ const EditComponent = (() => {
         if (!allowedCategories.includes(cat)) {
             _show_message('Неверная категория компонента', 'error');
             return false;
+        }
+        
+        if (cat === 'cases') {
+            const formFactor = document.querySelector('[name="form_factor"]')?.value;
+            if (!formFactor) {
+                _show_message('Выберите тип корпуса', 'error');
+                return false;
+            }
+        }
+        
+        if (cat === 'gpus') {
+            const memoryType = document.querySelector('[name="memory_type"]')?.value;
+            const validTypes = ['GDDR5', 'GDDR6', 'GDDR6X', 'GDDR7', 'GDDR7X'];
+            if (memoryType && !validTypes.includes(memoryType)) {
+                _show_message('Неверный тип памяти. Доступны: GDDR5, GDDR6, GDDR6X, GDDR7, GDDR7X', 'error');
+                return false;
+            }
         }
         
         return true;
@@ -468,8 +570,8 @@ const EditComponent = (() => {
     const _init = () => {
         _id = _get_param('id');
         _is_new = _get_param('new') === '1';
-        _cat = _get_param('cat') || _get_param('category');
-
+        _cat = _get_param('cat')
+        
         if (!_id && !_is_new) {
             _show_message('ID компонента не указан', 'error');
             setTimeout(() => { window.location.href = 'admin.html#components'; }, 2000);

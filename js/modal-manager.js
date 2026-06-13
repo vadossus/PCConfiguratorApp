@@ -159,14 +159,20 @@ const ModalManager = (() => {
         }
 
         if (type === 'storages' && build?.motherboards) {
-            if (data.type?.toUpperCase().includes('M.2')) {
-                const existing = storages.filter(s => s.type?.toUpperCase().includes('M.2')).length;
+            const is_m2 = (s) => {
+                const type = (s.type || '').toUpperCase();
+                const formFactor = (s.form_factor || '').toUpperCase();
+                const iface = (s.interface || '').toUpperCase();
+                return type.includes('NVME') || formFactor.includes('M.2') || iface.includes('M.2') || iface.includes('PCI-E');
+            };
+            if (is_m2(data)) {
+                const existing_m2 = storages.filter(s => is_m2(s)).length;
                 const m2_slots = build.motherboards.m2_slots || 1;
-                if (existing >= m2_slots) return false;
+                if (existing_m2 >= m2_slots) return false;
             } else {
-                const existing = storages.filter(s => !s.type?.toUpperCase().includes('M.2')).length;
+                const existing_sata = storages.filter(s => !is_m2(s)).length;
                 const sata_ports = build.motherboards.sata_ports || 4;
-                if (existing >= sata_ports) return false;
+                if (existing_sata  >= sata_ports) return false;
             }
         }
 

@@ -156,7 +156,7 @@ const Configurator = (() => {
         if (!data.image) return _get_icon(type);
         let path = data.image.toString().trim();
         path = path.replace(/^\.\//, '').replace(/^\/+/, '');
-        if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:') || path.startsWith('blob:')) return path;
+        if (path.startsWith('http://') || path.startsWith('https://')) return path;
         if (path.startsWith('source/') || path.startsWith('images/')) return path;
         const map = { cpu: 'cpus', cpus: 'cpus', motherboard: 'motherboards', motherboards: 'motherboards', ram: 'rams', rams: 'rams', gpu: 'gpus', gpus: 'gpus', storage: 'storages', storages: 'storages', psu: 'psus', psus: 'psus', cooler: 'coolers', coolers: 'coolers', case: 'cases', cases: 'cases' };
         const cat = data.category ? map[data.category.toLowerCase()] || data.category : (map[type] || 'components');
@@ -589,9 +589,16 @@ const Configurator = (() => {
                 details += `<div class="power-item total"><span>Итого потребление</span><span>${total} W</span></div>`;
                 const rec = Math.ceil(total * 1.2);
                 const psu_12v = _build.psus ? Math.round((parseInt(_build.psus.wattage) || 0) * 0.85) : 0;
-                const delta = psu_12v - total;
-                details += `<div class="power-item delta"><span>Запас мощности</span><span>${delta} W</span></div>`;
+                
+                if (_build.psus) {
+                    const delta = psu_12v - total;
+                    details += `<div class="power-item delta"><span>Запас мощности</span><span>${delta} W</span></div>`;
+                } else {
+                    details += `<div class="power-item delta"><span>Запас мощности</span><span>Выберите блок питания</span></div>`;
+                }
+
                 details += `<div class="power-item recommendation"><span>Рекомендуемый БП</span><span>от ${rec} W</span></div>`;
+
                 if (_build.psus) {
                     const pw = parseInt(_build.psus.wattage) || 0;
                     if (pw > 0) {
@@ -720,7 +727,14 @@ const Configurator = (() => {
         }
 
         if (mb && storages.length > 0) {
-            const m2 = storages.filter(s => s.type && (s.type.toUpperCase().includes('M.2') || s.type.toUpperCase().includes('NVME')));
+            const isM2 = (s) => {
+                const t = (s.type || '').toUpperCase();
+                const ff = (s.form_factor || '').toUpperCase();
+                const iface = (s.interface || '').toUpperCase();
+                return t.includes('NVME') || ff.includes('M.2') || iface.includes('M.2') || iface.includes('PCI-E');
+            };
+
+            const m2 = storages.filter(isM2);
             if (m2.length > 0) {
                 const slots = _extract_m2(mb);
                 if (m2.length > slots) {
@@ -730,7 +744,8 @@ const Configurator = (() => {
                     });
                 }
             }
-            const sata = storages.filter(s => !s.type || (!s.type.toUpperCase().includes('M.2') && !s.type.toUpperCase().includes('NVME')));
+            
+            const sata = storages.filter(s => !isM2(s));
             if (sata.length > 0) {
                 const ports = _extract_sata(mb);
                 if (sata.length > ports) {
@@ -871,11 +886,17 @@ const Configurator = (() => {
     const _update_save_btn = () => {
         const btn = document.getElementById('save-build-btn');
         if (!btn) return;
+
         const ready = !!_build.cpus && !!_build.motherboards && !!_build.rams;
-        btn.disabled = !ready;
-        btn.classList.toggle('btn-disabled', !ready);
-        btn.style.opacity = ready ? '1' : '0.5';
-        btn.style.cursor = ready ? 'pointer' : 'not-allowed';
+        
+        const hasErrors = _status.errors.length > 0;
+        
+        const canSave = ready && !hasErrors;
+
+        btn.disabled = !canSave;
+        btn.classList.toggle('btn-disabled', !canSave);
+        btn.style.opacity = canSave ? '1' : '0.5';
+        btn.style.cursor = canSave ? 'pointer' : 'not-allowed';
     };
 
     const _open_selection = (type) => {
@@ -1183,44 +1204,50 @@ const Configurator = (() => {
         header.appendChild(btn);
 
         btn.addEventListener('click', () => {
-            const modal = document.createElement('div');
-            modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:10000;';
-            modal.innerHTML = `<div style="background:white;border-radius:8px;width:90%;max-width:440px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
-                <div style="padding:16px 20px;border-bottom:1px solid #eaecf0;display:flex;align-items:center;justify-content:space-between;">
-                    <h3 style="margin:0;font-size:18px;font-weight:600;color:#101828;">О совместимости</h3>
-                    <button id="close_info_modal" style="background:none;border:none;font-size:24px;color:#667085;cursor:pointer;padding:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:8px;">&times;</button>
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        
+        modal.innerHTML = `
+            <div class="modal-box">
+                <div class="modal-header">
+                    <h3>О совместимости</h3>
+                    <button id="close_info_modal" class="modal-close">&times;</button>
                 </div>
-                <div style="padding:12px 20px;">
-                    <div style="margin-bottom:12px;font-size:13px;color:#475467;line-height:1.5;">Чтобы собрать компьютер, необходимо учитывать совместимость компонентов. Проверяется по:</div>
-                    <div style="margin-bottom:16px;font-size:13px;color:#475467;background:#f9fafb;padding:12px;border-radius:8px;">
-                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="color:#667085;">&bull;</span><span>Сокет процессора и материнской платы</span></div>
-                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="color:#667085;">&bull;</span><span>Слоты ОЗУ материнской платы и плашек ОЗУ</span></div>
-                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="color:#667085;">&bull;</span><span>Поддержка M.2 слотов на плате</span></div>
-                        <div style="display:flex;align-items:center;gap:6px;"><span style="color:#667085;">&bull;</span><span>Количество SATA портов</span></div>
+                <div class="modal-body">
+                    <div class="modal-desc">Чтобы собрать компьютер, необходимо учитывать совместимость компонентов. Проверяется по:</div>
+                    
+                    <div class="info-block">
+                        <div class="info-item"><span>&bull;</span><span>Сокет процессора и материнской платы</span></div>
+                        <div class="info-item"><span>&bull;</span><span>Слоты ОЗУ материнской платы и плашек ОЗУ</span></div>
+                        <div class="info-item"><span>&bull;</span><span>Поддержка M.2 слотов на плате</span></div>
+                        <div class="info-item"><span>&bull;</span><span>Количество SATA портов</span></div>
                     </div>
-                </div>
-                <div style="padding:0 20px 12px 20px;">
-                    <div style="margin-bottom:16px;">
-                        <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;"><span style="width:20px;height:20px;background:#12b76a;color:white;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;">&#10003;</span><span style="font-size:13px;color:#344054;">Зеленый — компонент совместим</span></div>
-                        <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;"><span style="width:20px;height:20px;background:#f79009;color:white;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">&#9888;</span><span style="font-size:13px;color:#344054;">Желтый — есть предупреждения</span></div>
-                        <div style="display:flex;align-items:center;gap:8px;"><span style="width:20px;height:20px;background:#667085;color:white;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;">&#9888;</span><span style="font-size:13px;color:#344054;">Серый — компонент неактивен</span></div>
+
+                    <div class="status-list">
+                        <div class="status-item"><span class="status-badge success">&#10003;</span><span>Зеленый — компонент совместим</span></div>
+                        <div class="status-item"><span class="status-badge warning">&#9888;</span><span>Желтый — есть предупреждения</span></div>
+                        <div class="status-item"><span class="status-badge error">&#9888;</span><span>Красный — несовместимые компоненты</span></div>
+                        <div class="status-item"><span class="status-badge disabled">&#9888;</span><span>Серый — компонент неактивен</span></div>
                     </div>
-                    <div style="background:#f9fafb;border-radius:8px;padding:12px;">
-                        <div style="font-weight:500;margin-bottom:6px;color:#101828;font-size:13px;">Обязательно для сборки:</div>
-                        <ul style="margin:0;padding-left:20px;color:#475467;font-size:13px;">
-                            <li style="margin-bottom:2px;">Процессор</li>
-                            <li style="margin-bottom:2px;">Материнская плата</li>
+
+                    <div class="required-box">
+                        <div class="required-title">Обязательно для сборки:</div>
+                        <ul class="required-list">
+                            <li>Процессор</li>
+                            <li>Материнская плата</li>
                             <li>Оперативная память</li>
                         </ul>
                     </div>
                 </div>
             </div>`;
-            document.body.appendChild(modal);
+            
+        document.body.appendChild(modal);
 
-            const close_modal = () => { document.body.removeChild(modal); };
-            modal.querySelector('#close_info_modal').addEventListener('click', close_modal);
-            modal.addEventListener('click', (e) => { if (e.target === modal) close_modal(); });
-        });
+        const _close = () => modal.remove();
+
+        modal.querySelector('#close_info_modal').addEventListener('click', _close);
+        modal.addEventListener('click', (e) => { if (e.target === modal) _close(); });
+    });
     };
 
     const _init = (data_manager, auth_manager) => {
