@@ -702,76 +702,116 @@ const Configurator = (() => {
         }
 
         if (ram && mb) {
-            const ram_type = (ram.type || ram.memory_type || ram.memory || '').toUpperCase();
-            const mb_type = (mb.memory_type || mb.memory || '').toUpperCase();
+            const ram_type = (ram.type || ram.memory_type || ram.memory || '').toUpperCase().trim();
+            const mb_type = (mb.memory_type || mb.memory || '').toUpperCase().trim();
             
             if (ram_type && mb_type) {
-                const mb_ddr4 = mb_type.includes('DDR4'), mb_ddr5 = mb_type.includes('DDR5');
-                const ram_ddr4 = ram_type.includes('DDR4'), ram_ddr5 = ram_type.includes('DDR5');
+                const is_hybrid_mb = mb_type.includes('DDR4/DDR5') || (mb_type.includes('DDR4') && mb_type.includes('DDR5'));
                 
-                if ((mb_ddr4 && ram_ddr5) || (mb_ddr5 && ram_ddr4)) {
-                    _status.errors.push({
-                        component1: 'rams', component2: 'motherboards',
-                        message: `Память ${ram_type} не подходит к разъемам ${mb_type} на материнской плате`
-                    });
-                }
-            }
-            
-            const mb_slots = _extract_mem_slots(mb);
-            if (mb_slots && ram.modules && parseInt(ram.modules) > mb_slots) {
-                _status.errors.push({
-                    component1: 'rams', component2: 'motherboards',
-                    message: `Недостаточно слотов: выбрано ${ram.modules} модуля(ей) на ${mb_slots} слота(ов)`
-                });
-            }
-        }
+                if (is_hybrid_mb) {
+                    if (!ram_type.includes('DDR4') && !ram_type.includes('DDR5')) {
+                        _status.errors.push({
+                            component1: 'rams',
+                            component2: 'motherboards',
+                            message: `Тип памяти (${ram.type}) не поддерживается гибридной материнской платой (${mb.memory_type})`
+                        });
+                    }
+                } else {
+                    const mb_ddr4 = mb_type.includes('DDR4');
+                    const mb_ddr5 = mb_type.includes('DDR5');
+                    const ram_ddr4 = ram_type.includes('DDR4');
+                    const ram_ddr5 = ram_type.includes('DDR5');
 
-        if (mb && storages.length > 0) {
-            const isM2 = (s) => {
-                const t = (s.type || '').toUpperCase();
-                const ff = (s.form_factor || '').toUpperCase();
-                const iface = (s.interface || '').toUpperCase();
-                return t.includes('NVME') || ff.includes('M.2') || iface.includes('M.2') || iface.includes('PCI-E');
-            };
-
-            const m2 = storages.filter(isM2);
-            if (m2.length > 0) {
-                const slots = _extract_m2(mb);
-                if (m2.length > slots) {
-                    _status.errors.push({
-                        component1: 'storages', component2: 'motherboards',
-                        message: `Плата имеет ${slots} M.2 слот(а), выбрано ${m2.length} M.2 накопитель(ей)`
-                    });
-                }
-            }
-            
-            const sata = storages.filter(s => !isM2(s));
-            if (sata.length > 0) {
-                const ports = _extract_sata(mb);
-                if (sata.length > ports) {
-                    _status.errors.push({
-                        component1: 'storages', component2: 'motherboards',
-                        message: `Плата имеет ${ports} SATA порт(а), выбрано ${sata.length} SATA накопитель(ей)`
-                    });
+                    if ((mb_ddr4 && !ram_ddr4) || (mb_ddr5 && !ram_ddr5)) {
+                        _status.errors.push({
+                            component1: 'rams',
+                            component2: 'motherboards',
+                            message: `Тип памяти (${ram.type || ram.memory_type}) не совпадает с типом памяти материнской платы (${mb.memory_type})`
+                        });
+                    }
                 }
             }
         }
 
-        if (cooler && cpu) {
-            if (cpu.socket && cooler.socket_compatibility) {
-                const sockets = cooler.socket_compatibility.toUpperCase().split(/[,|]/).map(s => s.trim());
-                if (!sockets.includes(cpu.socket.toUpperCase())) {
+            if (mb && storages.length > 0) {
+                const is_nvme_m2 = (s) => {
+                    const t = (s.type || '').toUpperCase();
+                    const ff = (s.form_factor || '').toUpperCase();
+                    const iface = (s.interface || '').toUpperCase();
+                    return t.includes('NVME') || iface.includes('PCI-E') || (ff.includes('M.2') && !iface.includes('SATA')) || (iface.includes('M.2') && !iface.includes('SATA'));
+                };
+
+                const nvme_count = storages.filter(is_nvme_m2).length;
+                const sata_count = storages.filter(s => !is_nvme_m2(s)).length;
+
+                const m2_slots = parseInt(mb.m2_slots) || 0;
+                const sata_ports = parseInt(mb.sata_ports) || 4;
+
+                if (nvme_count > m2_slots) {
+                    _status.errors.push({
+                        component1: 'storages', component2: 'motherboards',
+                        message: `Материнская плата имеет ${m2_slots} M.2 слот(а), а выбрано ${nvme_count} NVMe M.2 накопитель(ей)`
+                    });
+                }
+
+                if (sata_count > sata_ports) {
+                    _status.errors.push({
+                        component1: 'storages', component2: 'motherboards',
+                        message: `Материнская плата имеет ${sata_ports} SATA порт(а), а выбрано ${sata_count} SATA накопитель(ей)`
+                    });
+                }
+            }
+
+        if (cooler) {
+            if (cpu) {
+                if (cpu.socket && cooler.socket_compatibility) {
+                    const sockets = cooler.socket_compatibility.toUpperCase().split(/[,|]/).map(s => s.trim());
+                    const has_match = sockets.some(s => s.includes(cpu.socket.toUpperCase()) || cpu.socket.toUpperCase().includes(s));
+                    
+                    if (!has_match) {
+                        _status.warnings_list.push({
+                            component1: 'coolers', component2: 'cpus',
+                            message: `Кулер может не поддерживать сокет ${cpu.socket}. Проверьте совместимость.`
+                        });
+                    }
+                }
+                if (cpu.tdp && cooler.tdp && parseInt(cooler.tdp) < parseInt(cpu.tdp)) {
                     _status.warnings_list.push({
                         component1: 'coolers', component2: 'cpus',
-                        message: `Кулер может не поддерживать сокет ${cpu.socket}. Проверьте совместимость.`
+                        message: `TDP кулера (${cooler.tdp}Вт) недостаточно для процессора (${cpu.tdp}Вт)`
                     });
                 }
             }
-            if (cpu.tdp && cooler.tdp && parseInt(cooler.tdp) < parseInt(cpu.tdp)) {
-                _status.warnings_list.push({
-                    component1: 'coolers', component2: 'cpus',
-                    message: `TDP кулера (${cooler.tdp}W) недостаточно для процессора (${cpu.tdp}W)`
-                });
+
+            if (pc_case) {
+                const cooler_type = (cooler.type || '').toUpperCase();
+
+                if (cooler_type === 'AIO') { 
+                    const extract_numb = (str) => (String(str || '').match(/\d+/g) || []);
+                
+                    const supported_nums = extract_numb(pc_case.radiator_support); 
+                    const rad_nums = extract_numb(cooler.radiator_size);            
+                    if (rad_nums.length > 0 && !rad_nums.every(num => supported_nums.includes(num))) {
+                        _status.errors.push({
+                            component1: 'coolers', 
+                            component2: 'cases',
+                            message: `Радиатор ${cooler.radiator_size}мм не поддерживается корпусом (поддержка: ${pc_case.radiator_support || 'нет'})`
+                        });
+                        _status.valid = false; 
+                    }
+                } else {
+                    const cooler_height = parseInt(cooler.height) || 0;
+                    const max_height = parseInt(pc_case.max_cpu_cooler_height) || 0;
+                    
+                    if (cooler_height && max_height && cooler_height > max_height) {
+                        _status.errors.push({
+                            component1: 'coolers', 
+                            component2: 'cases',
+                            message: `Кулер (${cooler_height}мм) не влезает в корпус (макс. ${max_height}мм)`
+                        });
+                        _status.valid = false; 
+                    }
+                }
             }
         }
 
@@ -963,7 +1003,7 @@ const Configurator = (() => {
         _check_compat();
         _clear_storage();
         _calc_power();
-        _show_message('Сборка сброшена', 'success');
+        _show_message('сборка сброшена', 'success');
     };
 
     const _save_server = async (event) => {
@@ -975,7 +1015,7 @@ const Configurator = (() => {
         }
 
         const has = Object.values(_build).some(v => Array.isArray(v) ? v.length > 0 : v !== null);
-        if (!has) { alert('Сборка пуста! Выберите хотя бы один компонент.'); return; }
+        if (!has) { alert('cборка пуста! выберите хотя бы один компонент.'); return; }
         if (_saving) return;
         _saving = true;
         _show_loader();
@@ -994,22 +1034,35 @@ const Configurator = (() => {
             const name = prompt('Введите название сборки:', `Моя сборка ${new Date().toLocaleDateString('ru-RU')}`);
             if (name === null) { _saving = false; _hide_loader(); return; }
 
+            const is_gaming = confirm('Это игровой компьютер?\n\n(Нажмите "ОК" для Игрового, или "Отмена" для Офисного)');
+            const build_type = is_gaming ? 'gaming' : 'office';
+
             const user = _auth.getUser();
+            
             const res = await fetch(`api/builds.php?action=save&user_id=${user.id}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                body: JSON.stringify({ name, total_price: _total_price(), components: comps })
+                body: JSON.stringify({ 
+                    name, 
+                    total_price: _total_price(), 
+                    build_type: build_type, 
+                    components: comps 
+                })
             });
 
             const data = await res.json();
-            if (!res.ok) throw new Error(data.message || 'Ошибка сервера');
+            if (!res.ok) throw new Error(data.message || 'ошибка сервера');
             if (data.success) {
-                alert('Сборка успешно сохранена!');
+                alert('сборка успешно сохранена!');
+                
+                if (typeof _load_public_builds === 'function') {
+                    _load_public_builds(); 
+                }
             } else {
                 throw new Error(data.message);
             }
         } catch (e) {
-            alert(`Ошибка сохранения: ${e.message}`);
+            alert(`ошибка сохранения: ${e.message}`);
         } finally {
             _saving = false;
             _hide_loader();
@@ -1210,28 +1263,32 @@ const Configurator = (() => {
         modal.innerHTML = `
             <div class="modal-box">
                 <div class="modal-header">
-                    <h3>О совместимости</h3>
+                    <h3>Как собрать компьютер</h3>
                     <button id="close_info_modal" class="modal-close">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <div class="modal-desc">Чтобы собрать компьютер, необходимо учитывать совместимость компонентов. Проверяется по:</div>
+                    <div class="modal-desc">
+                        Сборка компьютера — это как конструктор. Нужно выбрать детали, которые подходят друг к другу. 
+                        Вот на что обращать внимание:
+                    </div>
                     
                     <div class="info-block">
-                        <div class="info-item"><span>&bull;</span><span>Сокет процессора и материнской платы</span></div>
-                        <div class="info-item"><span>&bull;</span><span>Слоты ОЗУ материнской платы и плашек ОЗУ</span></div>
-                        <div class="info-item"><span>&bull;</span><span>Поддержка M.2 слотов на плате</span></div>
-                        <div class="info-item"><span>&bull;</span><span>Количество SATA портов</span></div>
+                        <div class="info-item"><span>&bull;</span><span><strong>Процессор и материнская плата</strong> — должны иметь одинаковый сокет (разъём). Как пазл: если не подходит, не вставится.</span></div>
+                        <div class="info-item"><span>&bull;</span><span><strong>Оперативная память</strong> — смотрите тип (DDR4 или DDR5) и сколько слотов на материнской плате.</span></div>
+                        <div class="info-item"><span>&bull;</span><span><strong>Видеокарта</strong> — поместится ли в корпус по длине и хватит ли мощности блока питания.</span></div>
+                        <div class="info-item"><span>&bull;</span><span><strong>Блок питания</strong> — должен выдавать достаточно ватт для всех компонентов.</span></div>
+                        <div class="info-item"><span>&bull;</span><span><strong>Корпус</strong> — проверьте размеры: влезет ли материнская плата, видеокарта и кулер.</span></div>
                     </div>
 
                     <div class="status-list">
-                        <div class="status-item"><span class="status-badge success">&#10003;</span><span>Зеленый — компонент совместим</span></div>
-                        <div class="status-item"><span class="status-badge warning">&#9888;</span><span>Желтый — есть предупреждения</span></div>
-                        <div class="status-item"><span class="status-badge error">&#9888;</span><span>Красный — несовместимые компоненты</span></div>
-                        <div class="status-item"><span class="status-badge disabled">&#9888;</span><span>Серый — компонент неактивен</span></div>
+                        <div class="status-item"><span class="status-badge success">&#10003;</span><span>Зелёный — всё отлично, детали подходят</span></div>
+                        <div class="status-item"><span class="status-badge warning">&#9888;</span><span>Жёлтый — есть нюансы, но собрать можно</span></div>
+                        <div class="status-item"><span class="status-badge error">&#9888;</span><span>Красный — детали несовместимы, выберите другие</span></div>
+                        <div class="status-item"><span class="status-badge disabled">&#9888;</span><span>Серый — компонент временно недоступен</span></div>
                     </div>
 
                     <div class="required-box">
-                        <div class="required-title">Обязательно для сборки:</div>
+                        <div class="required-title">Минимальный набор для сборки ПК:</div>
                         <ul class="required-list">
                             <li>Процессор</li>
                             <li>Материнская плата</li>

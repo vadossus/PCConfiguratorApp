@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 class Database
 {
-    private string $host = 'localhost';
+    private string $host = 'MySQL-8.0';
     private string $name = 'pc_configurator';
     private string $user = 'root';
     private string $pass = '';

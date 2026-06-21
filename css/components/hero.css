@@ -468,15 +468,50 @@
 }
 
 .slogan-divider {
-    width: 100%;
-    height: 80px;
-    background: black;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 40px; 
+    padding: 20px 0;
+    box-sizing: border-box;
+}
+
+.slogan-divider .slogan-text {
+    margin: 0;
+}
+
+.slogan-filters {
     display: flex;
     align-items: center;
-    justify-content: center;
-    margin-top: 10px;
-    opacity: 0;
-    animation: fadeIn 0.5s ease-out 2.2s forwards;
+    gap: 20px; 
+}
+
+.slogan-filters .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px; 
+}
+
+.slogan-filters .filter-group label {
+    color: #888;
+    font-size: 14px;
+}
+
+.slogan-filters .filter-group select {
+    padding: 6px 10px;
+    background: #1e1e1e;
+    color: #fff;
+    border: 1px solid #333;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.slogan-filters .filter-group select:focus {
+    border-color: #555;
+    outline: none;
 }
 
 @keyframes fadeIn {

@@ -1,4 +1,4 @@
-/* Базовая структура */
+/* базовая структура */
 .component-page {
     padding-top: 100px;
     min-height: 100vh;
@@ -6,15 +6,15 @@
 }
 
 .comp-wrapper {
-    max-width: 1100px; /* Немного сузил для лучшего фокуса */
+    max-width: 1100px; 
     margin: 0 auto;
     padding: 20px;
 }
 
-/* Сетка карточки */
+
 .product_grid {
     display: grid;
-    grid-template-columns: 450px 1fr; /* Фиксированная ширина для фото */
+    grid-template-columns: 450px 1fr; 
     gap: 40px;
     background: #fff;
     border-radius: 16px;
@@ -42,7 +42,7 @@
     object-fit: contain;
 }
 
-/* Правая часть (инфо) */
+/* правая часть (инфо) */
 .info_block {
     display: flex;
     flex-direction: column;
@@ -86,7 +86,7 @@
 .store_prices_list {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px; /* Плотное прилегание как на скрине */
+    gap: 8px; 
 }
 
 .store_pill_item {
@@ -134,7 +134,7 @@
     margin-bottom: 20px;
 }
 
-/* Группы характеристик */
+/* группы характеристик */
 .spec_group {
     font-size: 14px;
     font-weight: 800;
@@ -149,7 +149,7 @@
     margin-top: 0;
 }
 
-/* Строка характеристики с точками (Dot Leaders) */
+/* строка характеристики с точками */
 .spec_row {
     display: flex;
     align-items: baseline;
@@ -169,7 +169,7 @@
     padding-left: 8px;
 }
 
-/* Магия точек между названием и значением */
+/*точек между названием и значением */
 .spec_row::after {
     content: "";
     flex: 1;
@@ -178,7 +178,7 @@
     border-bottom: 1px dotted #d2d2d7;
 }
 
-/* Описание */
+/* описание */
 .desc_section {
     margin-top: 40px;
 }
@@ -191,7 +191,7 @@
     white-space: pre-line;
 }
 
-/* Мобильная адаптация */
+/* мобильная адаптация */
 @media (max-width: 900px) {
     .product_grid {
         grid-template-columns: 1fr;

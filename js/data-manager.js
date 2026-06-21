@@ -26,10 +26,10 @@ const DataManager = (() => {
         sockets: {
             'AM4': ['AM4'], 'LGA1700': ['LGA1700'],
             'AM5': ['AM5'], 'LGA1200': ['LGA1200'],
-            'LGA1151': ['LGA1151'], 'TR4': ['TR4']
+            'LGA1151': ['LGA1151']
         },
         memory_types: {
-            'DDR4': ['DDR4'], 'DDR5': ['DDR5'], 'DDR3': ['DDR3']
+            'DDR4': ['DDR4'], 'DDR5': ['DDR5']
         },
         form_factors: {
             'ATX': ['ATX', 'E-ATX', 'Micro-ATX'],
@@ -38,12 +38,13 @@ const DataManager = (() => {
         }
     });
 
-    const getComponentsPage = async (type, page = 1, filters = {}) => {
+    // Добавлен аргумент limit в конец
+    const getComponentsPage = async (type, page = 1, filters = {}, limit = 5) => {
         const api_cat = CATEGORY_MAP[type] || type.replace(/s$/, '');
         const params = new URLSearchParams();
         params.append('category', api_cat);
         params.append('page', String(page));
-        params.append('limit', '5');
+        params.append('limit', String(limit)); // Используем переданный лимит
         params.append('is_active', '1');
 
         if (filters.search) params.append('search', filters.search);
@@ -97,7 +98,7 @@ const DataManager = (() => {
                 totalItems: total_items,
                 hasNext: page < total_pages,
                 hasPrev: page > 1,
-                itemsPerPage: 5
+                itemsPerPage: limit
             };
         } catch (e) {
             return {
@@ -107,7 +108,7 @@ const DataManager = (() => {
                 totalItems: 0,
                 hasNext: false,
                 hasPrev: false,
-                itemsPerPage: 5
+                itemsPerPage: limit
             };
         }
     };

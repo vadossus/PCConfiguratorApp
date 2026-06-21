@@ -72,7 +72,7 @@ function handle_save_build(PDO $db, int $user_id, array $input): void
     $components = $input['components'] ?? [];
 
     if (is_build_empty($components)) {
-        send_response(false, 'Сборка пустая, нужно выбрать компоненты', 400);
+        send_response(false, 'cборка пустая, нужно выбрать компоненты', 400);
     }
 
     $name = !empty($input['name'])
@@ -82,14 +82,19 @@ function handle_save_build(PDO $db, int $user_id, array $input): void
     $total_price = (float) ($input['total_price'] ?? 0);
     $components_json = json_encode($components, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
+    $build_type = isset($input['build_type']) && in_array($input['build_type'], ['gaming', 'office'], true)
+        ? $input['build_type']
+        : 'gaming';
+
     $stmt = $db->prepare(
-        'INSERT INTO user_builds (user_id, name, total_price, compatibility_data, created_at, updated_at)
-         VALUES (:user_id, :name, :price, :components, NOW(), NOW())'
+        'INSERT INTO user_builds (user_id, name, total_price, build_type, compatibility_data, created_at, updated_at)
+         VALUES (:user_id, :name, :price, :build_type, :components, NOW(), NOW())'
     );
     $stmt->execute([
         ':user_id' => $user_id,
         ':name' => $name,
         ':price' => $total_price,
+        ':build_type' => $build_type,
         ':components' => $components_json,
     ]);
 
@@ -97,6 +102,7 @@ function handle_save_build(PDO $db, int $user_id, array $input): void
         'build_id' => (int) $db->lastInsertId(),
         'name' => $name,
         'total_price' => $total_price,
+        'build_type' => $build_type,
     ]);
 }
 
@@ -153,6 +159,13 @@ function handle_update_build(PDO $db, int $user_id, array $input): void
     if (isset($input['total_price'])) {
         $fields[] = 'total_price = :price';
         $params[':price'] = (float) $input['total_price'];
+    }
+
+    if (isset($input['build_type'])) {
+        if (in_array($input['build_type'], ['gaming', 'office'], true)) {
+            $fields[] = 'build_type = :build_type';
+            $params[':build_type'] = $input['build_type'];
+        }
     }
 
     if (isset($input['components'])) {
@@ -225,8 +238,7 @@ function handle_get_public_builds(PDO $db): void
         'SELECT b.*, u.username FROM user_builds b
          LEFT JOIN users u ON b.user_id = u.id
          WHERE b.is_public = 1
-         ORDER BY b.likes DESC, b.created_at DESC
-         LIMIT 10'
+         ORDER BY b.likes DESC, b.created_at DESC'
     );
 
     $builds = $stmt->fetchAll();

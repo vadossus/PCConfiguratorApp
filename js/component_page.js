@@ -179,19 +179,19 @@ const ComponentPage = (() => {
 
     const _get_specs = () => {
         const specs = [];
-        const c = _data;
+        const c = _data; 
 
         if (_type === 'cpus') {
             specs.push({ group: 'Основные', fields: [
                 { label: 'Производитель', value: c.manufacturer || 'Не указан' },
                 { label: 'Сокет', value: c.socket || 'Не указан' },
-                { label: 'Ядер', value: c.cores ? `${c.cores} шт` : 'Не указано' },
-                { label: 'Потоков', value: c.threads ? `${c.threads} шт` : 'Не указано' },
-                { label: 'Частота', value: c.frequency || 'Не указана' }
+                { label: 'Ядер', value: c.cores ? `${c.cores}` : 'Не указано' },
+                { label: 'Потоков', value: c.threads ? `${c.threads}` : 'Не указано' },
+                { label: 'Частота', value: c.frequency || 'Не указана' },
+                { label: 'TDP', value: c.tdp ? `${c.tdp} Вт` : 'Не указан' }
             ]});
             specs.push({ group: 'Память', fields: [
-                { label: 'Тип памяти', value: c.memory_type || 'Не указан' },
-                { label: 'TDP', value: c.tdp ? `${c.tdp} Вт` : 'Не указан' }
+                { label: 'Тип памяти', value: c.memory_type || 'Не указан' }
             ]});
         } else if (_type === 'motherboards') {
             specs.push({ group: 'Основные', fields: [
@@ -202,12 +202,13 @@ const ComponentPage = (() => {
             ]});
             specs.push({ group: 'Память', fields: [
                 { label: 'Тип памяти', value: c.memory_type || 'Не указан' },
-                { label: 'Слотов', value: c.memory_slots || 'Не указано' },
+                { label: 'Слотов RAM', value: c.memory_slots || 'Не указано' },
                 { label: 'Макс. объем', value: c.max_memory ? `${c.max_memory} ГБ` : 'Не указан' }
             ]});
-            specs.push({ group: 'Разъемы', fields: [
+            specs.push({ group: 'Разъемы и сеть', fields: [
                 { label: 'M.2 слотов', value: c.m2_slots || 'Не указано' },
                 { label: 'SATA портов', value: c.sata_ports || 'Не указано' },
+                { label: 'PCI-E версия', value: c.pcie_version || 'Не указана' },
                 { label: 'Wi-Fi', value: c.wifi ? 'Есть' : 'Нет' }
             ]});
         } else if (_type === 'rams') {
@@ -217,6 +218,7 @@ const ComponentPage = (() => {
                 { label: 'Объем', value: c.capacity ? `${c.capacity} ГБ` : 'Не указан' },
                 { label: 'Модулей', value: c.modules ? `${c.modules} шт` : 'Не указано' },
                 { label: 'Частота', value: c.speed ? `${c.speed} МГц` : 'Не указана' },
+                { label: 'Задержка (CAS)', value: c.cas_latency || 'Не указана' },
                 { label: 'RGB', value: c.rgb ? 'Есть' : 'Нет' }
             ]});
         } else if (_type === 'gpus') {
@@ -225,6 +227,7 @@ const ComponentPage = (() => {
                 { label: 'Чип', value: c.gpu_chip || 'Не указан' },
                 { label: 'Память', value: c.memory_size ? `${c.memory_size} ГБ` : 'Не указана' },
                 { label: 'Тип памяти', value: c.memory_type || 'Не указан' },
+                { label: 'Длина', value: c.length ? `${c.length} мм` : 'Не указана' },
                 { label: 'TDP', value: c.tdp ? `${c.tdp} Вт` : 'Не указан' },
                 { label: 'Рек. БП', value: c.recommended_psu ? `${c.recommended_psu} Вт` : 'Не указан' }
             ]});
@@ -232,6 +235,7 @@ const ComponentPage = (() => {
             specs.push({ group: 'Накопитель', fields: [
                 { label: 'Производитель', value: c.manufacturer || 'Не указан' },
                 { label: 'Тип', value: c.type || 'Не указан' },
+                { label: 'Форм-фактор', value: c.form_factor || 'Не указан' },
                 { label: 'Интерфейс', value: c.interface || 'Не указан' },
                 { label: 'Объем', value: c.capacity ? `${c.capacity} ГБ` : 'Не указан' },
                 { label: 'Чтение', value: c.read_speed ? `${c.read_speed} МБ/с` : 'Не указана' },
@@ -251,16 +255,27 @@ const ComponentPage = (() => {
                 { label: 'Форм-фактор', value: c.form_factor || 'Не указан' },
                 { label: 'Поддержка плат', value: c.supported_motherboards || 'Не указана' },
                 { label: 'Макс. длина GPU', value: c.max_gpu_length ? `${c.max_gpu_length} мм` : 'Не указана' },
-                { label: 'Макс. высота кулера', value: c.max_cpu_cooler_height ? `${c.max_cpu_cooler_height} мм` : 'Не указана' }
+                { label: 'Макс. высота кулера', value: c.max_cpu_cooler_height ? `${c.max_cpu_cooler_height} мм` : 'Не указана' },
+                { label: 'Отсеки 3.5/2.5"', value: c.drive_bays || 'Не указаны' },
+                { label: 'Слоты для вентиляторов', value: c.fan_slots || 'Не указаны' }
             ]});
         } else if (_type === 'coolers') {
-            specs.push({ group: 'Охлаждение', fields: [
+            const isAio = String(c.type || '').toUpperCase() === 'AIO';
+            const fields = [
                 { label: 'Производитель', value: c.manufacturer || 'Не указан' },
                 { label: 'Тип', value: c.type || 'Не указан' },
-                { label: 'Совместимые сокеты', value: c.socket_compatibility || 'Не указаны' },
-                { label: 'Макс. TDP', value: c.tdp ? `${c.tdp} Вт` : 'Не указан' },
-                { label: 'Подсветка', value: c.led || 'Нет' }
-            ]});
+                { label: 'Совместимость', value: c.socket_compatibility || 'Не указаны' },
+                { label: 'TDP', value: c.tdp ? `${c.tdp} Вт` : 'Не указан' },
+                { label: 'Подсветка', value: c.led || 'Нет' },
+            ];
+
+            if (isAio) {
+                fields.push({ label: 'Радиатор', value: c.radiator_size ? `${c.radiator_size} мм` : 'Не указан' });
+            } else {
+                fields.push({ label: 'Высота', value: c.height ? `${c.height} мм` : 'Не указана' });
+            }
+
+            specs.push({ group: 'Охлаждение', fields: fields });
         }
 
         return specs;

@@ -1,4 +1,3 @@
-// srav.js
 'use strict';
 
 const srav_page = (() => {

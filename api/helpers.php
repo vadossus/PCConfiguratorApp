@@ -52,7 +52,8 @@ function require_admin(): void
 {
     require_auth();
 
-    if (($_SESSION['role'] ?? '') !== 'admin') {
-        send_response(false, 'Доступ запрещён', 403);
+    $role = $_SESSION['role'] ?? '';
+    if ($role !== 'admin' && $role !== 'sadmin') {
+        send_response(false, 'Доступ запрещен', 403);
     }
 }

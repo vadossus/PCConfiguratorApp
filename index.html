@@ -137,8 +137,27 @@
 
     <div class="slogan-divider">
         <div class="slogan-text">Сборки пользователей</div>
-    </div>
+        
+        <div class="slogan-filters">
+            <div class="filter-group">
+                <label for="filter-build-type">Тип:</label>
+                <select id="filter-build-type">
+                    <option value="all">Все сборки</option>
+                    <option value="gaming">Игровые</option>
+                    <option value="office">Офисные</option>
+                </select>
+            </div>
 
+            <div class="filter-group">
+                <label for="sort-build-price">Цена:</label>
+                <select id="sort-build-price">
+                    <option value="default">По умолчанию</option>
+                    <option value="asc">Сначала дешевые</option>
+                    <option value="desc">Сначала дорогие</option>
+                </select>
+            </div>
+        </div>
+    </div>
 
     <section class="community-carousel-section">
         <div class="configurator-container">
@@ -155,6 +174,7 @@
             </div>
         </div>
     </section>
+
 
     <div id="component-modal" class="modal hidden">
         <div class="modal-content">

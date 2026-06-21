@@ -22,19 +22,30 @@ const AuthManager = (() => {
 
     const _update_ui = () => {
         const logged = _user !== null;
+        const isAdmin = logged && (_user.role === 'admin' || _user.role === 'sadmin');
+        
         const elements = {
             'login-link': !logged,
             'logout-link': logged,
             'user-info': logged,
             'srav-link': logged,
-            'admin-link': logged && _user.role === 'admin'
+            'admin-link': isAdmin
         };
+        
         for (const [id, show] of Object.entries(elements)) {
             const el = document.getElementById(id);
-            if (el) el.classList.toggle('hidden', !show);
+            if (el) {
+                if (show) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            }
         }
+        
         const nav_name = document.getElementById('nav-username');
         if (nav_name && logged) nav_name.textContent = _user.username;
+        
         const user_info = document.getElementById('user-info');
         if (user_info && logged) {
             user_info.style.cursor = 'pointer';
@@ -100,11 +111,17 @@ const AuthManager = (() => {
     };
 
     const _logout = async () => {
-        try { await fetch(`${API}auth.php?action=logout`, { method: 'POST' }); } catch (e) {}
+        try { 
+            await fetch(`${API}auth.php?action=logout`, { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            }); 
+        } catch (e) {}
         _clear();
         _update_ui();
         _reset_build();
         _emit('logout', null);
+        window.location.href = 'index.html';
     };
 
     const _check = async () => {
@@ -266,10 +283,29 @@ const AuthManager = (() => {
             });
         }
 
-        document.getElementById('login-link')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            _show_modal();
-        });
+        // ИСПРАВЛЕННАЯ ЧАСТЬ - используем делегирование или пересоздаём обработчик
+        const loginLink = document.getElementById('login-link');
+        if (loginLink) {
+            // Удаляем старые обработчики
+            const newLoginLink = loginLink.cloneNode(true);
+            loginLink.parentNode.replaceChild(newLoginLink, loginLink);
+            newLoginLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                _show_modal();
+            });
+        }
+
+        // Добавляем обработчик для logout-link
+        const logoutLink = document.getElementById('logout-link');
+        if (logoutLink) {
+            // Удаляем старые обработчики
+            const newLogoutLink = logoutLink.cloneNode(true);
+            logoutLink.parentNode.replaceChild(newLogoutLink, logoutLink);
+            newLogoutLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                _logout();
+            });
+        }
     };
 
     const _restore = async () => {
@@ -297,7 +333,7 @@ const AuthManager = (() => {
         register: _register,
         logout: _logout,
         isLogged: () => _user !== null,
-        isAdmin: () => _user?.role === 'admin',
+        isAdmin: () => _user?.role === 'admin' || _user?.role === 'sadmin',
         getUser: () => _user,
         showModal: _show_modal,
         hideModal: _hide_modal,

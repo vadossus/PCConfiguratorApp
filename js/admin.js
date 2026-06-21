@@ -6,12 +6,14 @@ const AdminPanel = (() => {
     const _list = { components: [], users: [], builds: [], activities: [] };
     const _filters = { category: 'all', search: '', sort: 'created_at', order: 'desc', status: 'all', page: 1, limit: 10 };
 
+    // название типов
     const TYPE_NAMES = Object.freeze({
         cpus: 'Процессоры', motherboards: 'Материнские платы', rams: 'Оперативная память',
         gpus: 'Видеокарты', storages: 'Накопители', psus: 'Блоки питания',
         cases: 'Корпуса', coolers: 'Охлаждение'
     });
 
+    // логирование под запись
     const ACTIVITY_NAMES = Object.freeze({
         user_register: 'Регистрация пользователя', user_delete: 'Удаление пользователя',
         user_role_change: 'Изменение роли пользователя', build_save: 'Сохранение сборки',
@@ -26,9 +28,11 @@ const AdminPanel = (() => {
         cases: 'pc_case_icon.png', coolers: 'cooler_cpu_icon.png'
     });
 
+    // TODO: XSS - уязвимость устранить, добавление экранирования
     const _esc = (text) => { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; };
     const _format_price = (p) => new Intl.NumberFormat('ru-RU').format(p || 0);
 
+    // лоадер загрузки
     const _show_loader = (t = 'Загрузка...') => {
         const l = document.getElementById('global-loader');
         const s = l?.querySelector('.loader-text');
@@ -36,22 +40,36 @@ const AdminPanel = (() => {
         l?.classList.remove('hidden');
     };
 
+    // сокрытие лоудера
     const _hide_loader = () => document.getElementById('global-loader')?.classList.add('hidden');
     const _msg = (m, t = 'success') => alert(t === 'error' ? `Ошибка: ${m}` : m);
 
+    // получение текущего пользователя
     const _check_access = () => {
         const s = localStorage.getItem('currentUser');
         if (!s) { window.location.href = 'index.html'; return false; }
-        try { if (JSON.parse(s).role !== 'admin') { window.location.href = 'index.html'; return false; } return true; }
-        catch (e) { window.location.href = 'index.html'; return false; }
+        try { 
+            const user = JSON.parse(s);
+            if (user.role !== 'admin' && user.role !== 'sadmin') { 
+                window.location.href = 'index.html'; 
+                return false; 
+            } 
+            return true; 
+        }
+        catch (e) { 
+            window.location.href = 'index.html'; 
+            return false; 
+        }
     };
 
+    // навигация
     const _prepare_nav = () => {
         document.querySelectorAll('.admin-nav-link').forEach(l => {
             l.addEventListener('click', e => { e.preventDefault(); _switch_section(l.dataset.section); });
         });
     };
 
+    // смена секции
     const _switch_section = (name) => {
         document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
         document.querySelectorAll('.admin-nav-link').forEach(l => l.classList.remove('active'));
@@ -68,21 +86,12 @@ const AdminPanel = (() => {
         if (m[name]) m[name]();
     };
 
+    // категории 
     const _fill_cat_select = () => {
         const s = document.getElementById('component-category');
         if (!s) return;
         s.innerHTML = '<option value="">Выберите категорию</option>';
         for (const [k, v] of Object.entries(TYPE_NAMES)) { const o = document.createElement('option'); o.value = k; o.textContent = v; s.appendChild(o); }
-    };
-
-    let _first_admin_id = null;
-
-    const _find_first_admin = () => {
-        const admins = _list.users.filter(u => u.role === 'admin');
-        if (admins.length > 0) {
-            admins.sort((a, b) => a.id - b.id);
-            _first_admin_id = admins[0].id;
-        }
     };
 
     const _bind_events = () => {
@@ -95,6 +104,7 @@ const AdminPanel = (() => {
         document.getElementById('logout-link')?.addEventListener('click', e => { e.preventDefault(); localStorage.removeItem('currentUser'); window.location.href = 'index.html'; });
     };
 
+    // биндинг фильтров сортировки поиска по элементам
     const _bind_filters = () => {
         document.getElementById('component-type-filter')?.addEventListener('change', e => { _filters.category = e.target.value; _filters.page = 1; _load_components(); });
         document.getElementById('component-search')?.addEventListener('input', e => { _filters.search = e.target.value; clearTimeout(_state.search_timer); _state.search_timer = setTimeout(() => { _filters.page = 1; _load_components(); }, 500); });
@@ -147,6 +157,7 @@ const AdminPanel = (() => {
     const _refresh_activities = () => _load_activities(1, true);
     const _load_more_activities = () => _load_activities(_state.activity_page + 1);
 
+    // отрисовка активностей
     const _render_activities = () => {
         const c = document.getElementById('activity-list');
         if (!c) return;
@@ -455,57 +466,32 @@ const AdminPanel = (() => {
             return;
         }
         
-        _find_first_admin();
-        
         const current_user = JSON.parse(localStorage.getItem('currentUser') || '{}');
-        const is_first_admin = (current_user.id == _first_admin_id);
-        const is_admin = (current_user.role === 'admin');
+        const is_sadmin = (current_user.role === 'sadmin');
         
         _list.users.forEach(u => {
             const tr = document.createElement('tr');
             
-            let can_change_role = false;
-            let can_delete = false;
-            
-            if (is_first_admin) {
-                if (u.id != current_user.id) {
-                    can_change_role = true;
-                }
-                if (u.id != current_user.id) {
-                    can_delete = true;
-                }
-            } 
-            else if (is_admin && !is_first_admin) {
-                can_change_role = false;
-                if (u.role !== 'admin') {
-                    can_delete = true;
-                }
-            }
+            const is_self = (u.id == current_user.id);
+            const can_change_role = is_sadmin && !is_self;
+            const can_delete = is_sadmin && !is_self;
             
             let role_html = '';
             if (can_change_role) {
                 role_html = `<select class="role-select" data-user-id="${u.id}" data-current-role="${u.role}">
                                 <option value="user" ${u.role === 'user' ? 'selected' : ''}>Пользователь</option>
                                 <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Администратор</option>
+                                <option value="sadmin" ${u.role === 'sadmin' ? 'selected' : ''}>Супер-админ</option>
                             </select>`;
             } else {
-                role_html = `<span class="role-badge ${u.role}">${u.role === 'admin' ? 'Администратор' : 'Пользователь'}</span>`;
+                let roleName = u.role === 'sadmin' ? 'Супер-админ' : (u.role === 'admin' ? 'Администратор' : 'Пользователь');
+                role_html = `<span class="role-badge ${u.role}">${roleName}</span>`;
             }
             
-            let delete_html = '';
-            if (can_delete) {
-                delete_html = `<button class="btn-action btn-delete" data-user-id="${u.id}">Удалить</button>`;
-            } else {
-                delete_html = '<span class="text-muted">—</span>';
-            }
-            
-            let mark = '';
-            if (u.id == _first_admin_id && u.role === 'admin') {
-                mark = ' [Главный]';
-            }
+            let delete_html = can_delete ? `<button class="btn-action btn-delete" data-user-id="${u.id}">Удалить</button>` : '<span class="text-muted">—</span>';
             
             tr.innerHTML = `
-                <td>${u.id}${mark}</td>
+                <td>${u.id}</td>
                 <td>${_esc(u.username)}</td>
                 <td>${_esc(u.email)}</td>
                 <td>${role_html}</td>
@@ -521,16 +507,8 @@ const AdminPanel = (() => {
             select.addEventListener('change', async () => {
                 const userId = select.dataset.userId;
                 const newRole = select.value;
-                const currentRole = select.dataset.currentRole;
                 
-                let confirmMsg = '';
-                if (currentRole === 'admin' && newRole === 'user') {
-                    confirmMsg = 'Понизить этого администратора до пользователя?';
-                } else if (currentRole === 'user' && newRole === 'admin') {
-                    confirmMsg = 'Назначить этого пользователя администратором?';
-                }
-                
-                if (confirmMsg && !confirm(confirmMsg)) {
+                if (!confirm('Изменить роль пользователя?')) {
                     _load_users();
                     return;
                 }
@@ -544,6 +522,7 @@ const AdminPanel = (() => {
                     const data = await res.json();
                     if (data.success) {
                         alert('Роль изменена');
+                        await _log_action('user_role_change', `ID: ${userId}, роль: ${newRole}`);
                         _load_users();
                     } else {
                         alert(data.message || 'Ошибка');
@@ -559,7 +538,10 @@ const AdminPanel = (() => {
         document.querySelectorAll('.btn-delete').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const userId = btn.dataset.userId;
-                if (!confirm('Удалить пользователя?')) return;
+                const user = _list.users.find(u => u.id == userId);
+                if (!user) return;
+                
+                if (!confirm(`Удалить пользователя ${user.username}?`)) return;
                 
                 try {
                     const res = await fetch('api/admin.php?action=delete_user', {
@@ -570,6 +552,7 @@ const AdminPanel = (() => {
                     const data = await res.json();
                     if (data.success) {
                         alert('Пользователь удалён');
+                        await _log_action('user_delete', `ID: ${userId}`);
                         _load_users();
                     } else {
                         alert(data.message || 'Ошибка');

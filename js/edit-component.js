@@ -10,19 +10,19 @@ const EditComponent = (() => {
     // поля с характеристиками
     const FIELDS = Object.freeze({
         cpus: [
-            { name: 'socket', label: 'Сокет', type: 'text' },
+            { name: 'socket', label: 'Сокет', type: 'select', options: ['LGA1700', 'LGA1200', 'LGA1151-v2', 'AM4', 'AM5', 'LGA1851'] },
             { name: 'cores', label: 'Ядра', type: 'number', min: 1 },
             { name: 'threads', label: 'Потоки', type: 'number', min: 1 },
             { name: 'frequency', label: 'Частота', type: 'text' },
             { name: 'tdp', label: 'TDP (Вт)', type: 'number', min: 0 },
-            { name: 'memory_type', label: 'Тип памяти', type: 'select', options: ['DDR4', 'DDR5'] },
+            { name: 'memory_type', label: 'Тип памяти', type: 'select', options: ['DDR4', 'DDR5', 'DDR4/DDR5'] },
             { name: 'manufacturer', label: 'Производитель', type: 'select', options: ['Intel', 'AMD'] }
         ],
         motherboards: [
-            { name: 'socket', label: 'Сокет', type: 'text' },
+            { name: 'socket', label: 'Сокет', type: 'select', options: ['LGA1700', 'LGA1200', 'LGA1151-v2', 'AM4', 'AM5', 'LGA1851'] },
             { name: 'chipset', label: 'Чипсет', type: 'text' },
             { name: 'form_factor', label: 'Форм-фактор', type: 'select', options: ['ATX', 'Micro-ATX', 'Mini-ITX'] },
-            { name: 'memory_type', label: 'Тип памяти', type: 'select', options: ['DDR4', 'DDR5'] },
+            { name: 'memory_type', label: 'Тип памяти', type: 'select', options: ['DDR4', 'DDR5', 'DDR4/DDR5'] },
             { name: 'memory_slots', label: 'Слотов памяти', type: 'number', min: 2, max: 4 },
             { name: 'max_memory', label: 'Макс. память (ГБ)', type: 'number', min: 16 },
             { name: 'm2_slots', label: 'M.2 слотов', type: 'number', min: 0 },
@@ -80,9 +80,12 @@ const EditComponent = (() => {
         ],
         coolers: [
             { name: 'type', label: 'Тип', type: 'select', options: ['Air', 'AIO'] },
-            { name: 'socket_compatibility', label: 'Сокеты', type: 'text' },
-            { name: 'tdp', label: 'TDP (Вт)', type: 'number', min: 0 },
-            { name: 'height', label: 'Высота (мм)', type: 'number', min: 50 },
+            { name: 'socket_compatibility', label: 'Совместимость сокетов', type: 'select_checkbox', options: ['LGA1700', 'LGA1200', 'LGA1151-v2', 'AM4', 'AM5', 'LGA1851'] },
+            { name: 'tdp', label: 'Макс. TDP (Вт)', type: 'number', min: 0 },
+            { name: 'type', label: 'Тип охлаждения', type: 'select', options: ['Воздушное', 'AIO'] },
+            { name: 'height', label: 'Высота кулера воздушного охлаждения (мм)', type: 'number', min: 0 },
+            { name: 'radiator_size', label: 'Размер радиатора (для AIO)', type: 'select', options: ['120', '240', '280', '360', '420'] },
+            { name: 'fan_diameter', label: 'Диаметр вентилятора (мм)', type: 'number', min: 0 },
             { name: 'led', label: 'Подсветка', type: 'select', options: ['None', 'RGB', 'ARGB'] },
             { name: 'manufacturer', label: 'Производитель', type: 'select', options: ['Noctua', 'be quiet!', 'Corsair', 'Arctic', 'DeepCool'] }
         ]
@@ -241,6 +244,7 @@ const EditComponent = (() => {
         const photo_column = document.querySelector('.photo-column');
         const dynamic_fields = document.getElementById('dynamic-fields');
         
+        // 1. Сначала генерируем и вставляем HTML для левой колонки
         if (photo_column && left.length > 0) {
             const existing = photo_column.querySelector('.spec-fields-left');
             if (existing) existing.remove();
@@ -257,60 +261,76 @@ const EditComponent = (() => {
             } else {
                 photo_column.insertAdjacentHTML('beforeend', html);
             }
-            
-            left.forEach(f => {
-                const input = photo_column.querySelector(`[name="${f.name}"]`);
-                if (input && _data) {
-                    if (input.type === 'checkbox') {
-                        input.checked = !!_data[f.name];
-                    } else if (_data[f.name] !== undefined && _data[f.name] !== null) {
-                        input.value = _data[f.name];
-                    }
-                }
-            });
         }
         
-        if (dynamic_fields && right.length > 0) {
-            let html = '';
-            for (let i = 0; i < right.length; i += 2) {
-                html += '<div class="fields-row">';
-                html += _make_field(right[i], true);
-                html += right[i + 1] ? _make_field(right[i + 1], true) : '<div></div>';
-                html += '</div>';
+        // 2. Генерируем и вставляем HTML для правой колонки
+        if (dynamic_fields) {
+            if (right.length > 0) {
+                let html = '';
+                for (let i = 0; i < right.length; i += 2) {
+                    html += '<div class="fields-row">';
+                    html += _make_field(right[i], true);
+                    html += right[i + 1] ? _make_field(right[i + 1], true) : '<div></div>';
+                    html += '</div>';
+                }
+                dynamic_fields.innerHTML = html;
+            } else {
+                dynamic_fields.innerHTML = '';
             }
-            dynamic_fields.innerHTML = html;
-            
-            right.forEach(f => {
-                const input = dynamic_fields.querySelector(`[name="${f.name}"]`);
-                if (input && _data) {
-                    if (input.type === 'checkbox') {
-                        input.checked = !!_data[f.name];
-                    } else if (_data[f.name] !== undefined && _data[f.name] !== null) {
-                        input.value = _data[f.name];
-                    }
-                }
-            });
         }
         
-        if (dynamic_fields && right.length === 0) {
-            dynamic_fields.innerHTML = '';
-        }
+        // 3. ТЕПЕРЬ, КОГДА ВСЕ ПОЛЯ ТОЧНО ЕСТЬ В DOM, заполняем их данными
+        all.forEach(f => {
+            // Ищем элемент по имени во всем документе (и слева, и справа)
+            const input = document.querySelector(`[name="${f.name}"]`);
+            if (!input || !_data) return;
+
+            const db_val = _data[f.name];
+            if (db_val === undefined || db_val === null) return;
+
+            if (f.type === 'checkbox') {
+                // Приводим к boolean (работает и для true/false, и для 1/0 из БД)
+                input.checked = Boolean(parseInt(db_val) || db_val === true || db_val === '1');
+            } else if (f.type === 'select_checkbox') {
+                // Обработка кастомного мультиселекта
+                const container = input.closest('.dropdown-multi');
+                if (container) {
+                    const selected_values = db_val.toString().split(',').map(v => v.trim()).filter(Boolean);
+                    
+                    container.querySelectorAll('.dropdown-item input').forEach(cb => {
+                        cb.checked = selected_values.includes(cb.value);
+                    });
+                    
+                    const textSpan = container.querySelector('.selected-text');
+                    if (textSpan) {
+                        textSpan.textContent = selected_values.length ? selected_values.join(', ') : 'Выберите...';
+                    }
+                    input.value = selected_values.join(', ');
+                }
+            } else if (f.type === 'select') {
+                // Проверяем существование опции перед подстановкой (чтобы избежать падения из-за типов данных)
+                const optionExists = Array.from(input.options).some(opt => opt.value == db_val);
+                if (optionExists) {
+                    input.value = db_val;
+                }
+            } else {
+                // Обычные текстовые и числовые поля
+                input.value = db_val;
+            }
+        });
     };
     
-    // динамическое создание полей на основе типа полей в FIELDS
+    // Функция генерирует чистый пустой шаблон поля, данные подставятся позже
     const _make_field = (field, half = false) => {
-        const val = _data ? (_data[field.name] || '') : '';
         const cls = half ? 'form-group half' : 'form-group';
 
         if (field.type === 'select_checkbox') {
-            let selected_values = val ? val.split(',').map(v => v.trim()) : [];
-            const id = 'dd_' + Date.now() + '_' + Math.random();
-            
+            const id = 'dd_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             let optionsHtml = '';
             field.options.forEach(opt => {
                 optionsHtml += `
                     <div class="dropdown-item" data-value="${opt}">
-                        <input type="checkbox" value="${opt}" ${selected_values.includes(opt) ? 'checked' : ''}>
+                        <input type="checkbox" value="${opt}">
                         <span>${opt}</span>
                     </div>
                 `;
@@ -320,12 +340,12 @@ const EditComponent = (() => {
                 <label>${field.label}</label>
                 <div class="dropdown-multi" id="${id}">
                     <div class="dropdown-btn">
-                        <span class="selected-text">${selected_values.length ? selected_values.join(', ') : 'Выберите...'}</span>
+                        <span class="selected-text">Выберите...</span>
                         <span>▼</span>
                     </div>
                     <div class="dropdown-menu">
                         ${optionsHtml}
-                        <input type="hidden" name="${field.name}" value="${selected_values.join(', ')}">
+                        <input type="hidden" name="${field.name}" value="">
                     </div>
                 </div>
             </div>`;
@@ -334,21 +354,20 @@ const EditComponent = (() => {
         if (field.type === 'select') {
             let opts = '<option value="">Выберите...</option>';
             (field.options || []).forEach(o => {
-                opts += `<option value="${o}" ${val == o ? 'selected' : ''}>${o}</option>`;
+                opts += `<option value="${o}">${o}</option>`;
             });
             return `<div class="${cls}"><label for="${field.name}">${field.label}</label><select id="${field.name}" name="${field.name}" class="form-control">${opts}</select></div>`;
         }
         
         if (field.type === 'checkbox') {
-            const checked = val ? 'checked' : '';
-            return `<div class="${cls}"><label class="checkbox-label"><input type="checkbox" name="${field.name}" ${checked}>${field.label}</label></div>`;
+            return `<div class="${cls}"><label class="checkbox-label"><input type="checkbox" name="${field.name}"> ${field.label}</label></div>`;
         }
         
         if (field.type === 'number') {
-            return `<div class="${cls}"><label for="${field.name}">${field.label}</label><input type="number" id="${field.name}" name="${field.name}" class="form-control" value="${val}" min="${field.min || 0}" max="${field.max || ''}" step="1"></div>`;
+            return `<div class="${cls}"><label for="${field.name}">${field.label}</label><input type="number" id="${field.name}" name="${field.name}" class="form-control" value="" min="${field.min || 0}" max="${field.max || ''}" step="1"></div>`;
         }
         
-        return `<div class="${cls}"><label for="${field.name}">${field.label}</label><input type="text" id="${field.name}" name="${field.name}" class="form-control" value="${_esc(val)}"></div>`;
+        return `<div class="${cls}"><label for="${field.name}">${field.label}</label><input type="text" id="${field.name}" name="${field.name}" class="form-control" value=""></div>`;
     };
 
     const _init_dropdowns = () => {

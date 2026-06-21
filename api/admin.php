@@ -153,164 +153,185 @@ function handle_get_users(PDO $db): void
 
 function handle_add_component(PDO $db, array $input): void
 {
-    if (empty($input['category_code'])) {
-        send_response(false, 'Не указана категория компонента. Получено: ' . json_encode(array_keys($input)), 400);
-        return;
-    }
-    
-    if (empty($input['name'])) {
-        send_response(false, 'Не указано название компонента', 400);
-        return;
-    }
-    if (!isset($input['price'])) {
-        send_response(false, 'Не указана цена компонента', 400);
+    if (empty($input['category_code']) || empty($input['name']) || !isset($input['price'])) {
+        send_response(false, 'Переданы не все обязательные поля', 400);
         return;
     }
 
-    $table_map = [
+    $map = [
         'cpus' => 'cpus', 'motherboards' => 'motherboards', 'rams' => 'rams',
         'gpus' => 'gpus', 'storages' => 'storages', 'psus' => 'psus',
         'cases' => 'cases', 'coolers' => 'coolers',
     ];
 
-    $target_table = $table_map[$input['category_code']] ?? null;
-    if (!$target_table) {
+    $table = $map[$input['category_code']] ?? null;
+    if (!$table) {
         send_response(false, 'Неверная категория', 400);
         return;
     }
 
     try {
         $db->beginTransaction();
-        $db->exec('SET FOREIGN_KEY_CHECKS = 0');
 
-        $insert_data = [
+        $child_data = [
             'name' => $input['name'],
-            'description' => $input['description'] ?? '',
-            'price' => (float) $input['price'],
-            'image' => $input['image'] ?? '',
-            'is_active' => 1,
+            'description' => $input['description'] ?? null,
+            'price' => (float)$input['price'],
+            'image' => $input['image'] ?? null,
+            'is_active' => isset($input['is_active']) ? (int)$input['is_active'] : 1,
             'created_at' => date('Y-m-d H:i:s'),
-            'updated_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s')
         ];
 
-        foreach ($input as $key => $value) {
-            if (in_array($key, ['category_code', 'id', 'name', 'description', 'price', 'image', 'is_active'])) {
-                continue;
+        $specs = [
+            'cpus'         => ['socket', 'cores', 'threads', 'frequency', 'tdp', 'memory_type', 'manufacturer'],
+            'motherboards' => ['socket', 'chipset', 'form_factor', 'memory_type', 'memory_slots', 'max_memory', 'm2_slots', 'sata_ports', 'pcie_version', 'wifi', 'manufacturer'],
+            'rams'         => ['type', 'capacity', 'modules', 'speed', 'cas_latency', 'rgb', 'manufacturer'],
+            'gpus'         => ['gpu_chip', 'memory_size', 'memory_type', 'tdp', 'recommended_psu', 'length', 'manufacturer', 'chip_manufacturer', 'pcie_version', 'hdmi_ports', 'displayport_ports'],
+            'storages'     => ['type', 'interface', 'capacity', 'form_factor', 'read_speed', 'write_speed', 'manufacturer'],
+            'psus'         => ['wattage', 'efficiency', 'form_factor', 'modular', 'manufacturer', 'pcie_connectors', 'sata_connectors'],
+            'cases'        => ['form_factor', 'supported_motherboards', 'color', 'window', 'max_gpu_length', 'max_cpu_cooler_height', 'drive_bays', 'fan_slots', 'radiator_support', 'manufacturer'],
+            'coolers'      => ['type', 'socket_compatibility', 'tdp', 'height', 'radiator_size', 'fan_size', 'noise_level', 'led', 'manufacturer']
+        ];
+
+        $allowed = $specs[$table] ?? [];
+
+        foreach ($input as $k => $v) {
+            $db_key = $k;
+            if ($table === 'coolers') {
+                if ($k === 'fan_diameter') { $db_key = 'fan_size'; }
+                if ($k === 'noise') { $db_key = 'noise_level'; }
             }
-            if ($value !== '' && $value !== null) {
-                $insert_data[$key] = $value;
+
+            if (in_array($db_key, $allowed, true)) {
+                $child_data[$db_key] = ($v === '' || $v === null) ? null : $v;
             }
         }
 
-        $reserved_words = ['window', 'order', 'group', 'key', 'index', 'type', 'value'];
-        $escaped_fields = array_map(function($field) use ($reserved_words) {
-            return in_array($field, $reserved_words, true) ? "`{$field}`" : $field;
-        }, array_keys($insert_data));
+        $cols = array_keys($child_data);
+        $res = ['window', 'order', 'group', 'key', 'index', 'type', 'value'];
+        $esc_cols = array_map(function($c) use ($res) {
+            return in_array($c, $res, true) ? "`{$c}`" : $c;
+        }, $cols);
 
-        $fields = implode(', ', $escaped_fields);
-        $placeholders = ':' . implode(', :', array_keys($insert_data));
+        $fields_str = implode(', ', $esc_cols);
+        $params_str = ':' . implode(', :', $cols);
 
-        $stmt = $db->prepare("INSERT INTO {$target_table} ({$fields}) VALUES ({$placeholders})");
-        $stmt->execute($insert_data);
+        $stmt = $db->prepare("INSERT INTO {$table} ({$fields_str}) VALUES ({$params_str})");
+        $stmt->execute($child_data);
         
-        $reference_id = (int) $db->lastInsertId();
-
+        $ref_id = (int)$db->lastInsertId();
         $cat_stmt = $db->prepare('SELECT id FROM component_categories WHERE code = :code LIMIT 1');
         $cat_stmt->execute([':code' => $input['category_code']]);
-        $category_id = (int) $cat_stmt->fetchColumn();
+        $cat_id = (int)$cat_stmt->fetchColumn();
 
         $link_stmt = $db->prepare(
             'INSERT INTO components (category_id, reference_id, reference_table, is_active, created_at, updated_at)
-             VALUES (:cat_id, :ref_id, :ref_table, 1, :created, :updated)'
+             VALUES (:cat_id, :ref_id, :ref_table, :is_active, :created, :updated)'
         );
         $link_stmt->execute([
-            ':cat_id' => $category_id,
-            ':ref_id' => $reference_id,
-            ':ref_table' => $target_table,
-            ':created' => date('Y-m-d H:i:s'),
-            ':updated' => date('Y-m-d H:i:s'),
+            ':cat_id'    => $cat_id,
+            ':ref_id'    => $ref_id,
+            ':ref_table' => $table,
+            ':is_active' => $child_data['is_active'],
+            ':created'   => $child_data['created_at'],
+            ':updated'   => $child_data['updated_at']
         ]);
 
-        $db->exec('SET FOREIGN_KEY_CHECKS = 1');
         $db->commit();
-
         send_response(true, 'Компонент добавлен', 201);
     } catch (Throwable $e) {
-        $db->exec('SET FOREIGN_KEY_CHECKS = 1');
-        $db->rollBack();
-        send_response(false, 'Ошибка добавления компонента', 500);
+        if ($db->inTransaction()) { $db->rollBack(); }
+        send_response(false, 'Ошибка добавления: ' . $e->getMessage(), 500);
     }
 }
 
 function handle_update_component(PDO $db, array $input): void
 {
-    $id = (int) ($input['id'] ?? 0);
+    $id = (int)($input['id'] ?? 0);
     if (!$id) {
         send_response(false, 'ID не указан', 400);
+        return;
     }
 
-    $stmt = $db->prepare(
-        "SELECT c.*, cat.code AS category_code
-         FROM components c
-         INNER JOIN component_categories cat ON c.category_id = cat.id
-         WHERE c.id = :id LIMIT 1"
-    );
-    $stmt->execute([':id' => $id]);
+    $stmt = $db->prepare("SELECT * FROM components WHERE id = ? LIMIT 1");
+    $stmt->execute([$id]);
     $comp = $stmt->fetch();
 
     if (!$comp) {
         send_response(false, 'Компонент не найден', 404);
+        return;
     }
 
-    $target_table = $comp['reference_table'];
-    $reference_id = $comp['reference_id'];
+    $table = $comp['reference_table'];
+    $ref_id = $comp['reference_id'];
 
-    $reserved_words = ['window', 'order', 'group', 'key', 'index', 'type', 'value'];
-    
-    $allowed_fields = [
-        'name', 'description', 'price', 'image', 'socket', 'cores', 'threads',
-        'frequency', 'tdp', 'memory_type', 'chipset', 'form_factor', 'memory_slots',
-        'max_memory', 'm2_slots', 'sata_ports', 'pcie_version', 'wifi', 'type',
-        'capacity', 'speed', 'modules', 'rgb', 'gpu_chip', 'memory_size',
-        'recommended_psu', 'hdmi_ports', 'displayport_ports', 'length',
-        'chip_manufacturer', 'interface', 'read_speed', 'write_speed', 'wattage',
-        'efficiency', 'modular', 'pcie_connectors', 'sata_connectors',
-        'radiator_size', 'fan_size', 'noise_level', 'height', 'led',
-        'socket_compatibility', 'supported_motherboards', 'color', 'window',
-        'max_gpu_length', 'max_cpu_cooler_height', 'drive_bays', 'fan_slots',
-        'radiator_support', 'is_active',
-    ];
+    try {
+        $db->beginTransaction();
 
-    $update_data = [];
-    foreach ($allowed_fields as $field) {
-        if (array_key_exists($field, $input)) {
-            $update_data[$field] = $input[$field];
+        $is_active = isset($input['is_active']) ? (int)$input['is_active'] : $comp['is_active'];
+        $db->prepare("UPDATE components SET is_active = ?, updated_at = ? WHERE id = ?")
+           ->execute([$is_active, date('Y-m-d H:i:s'), $id]);
+
+        $child_data = [];
+        
+        $base_fields = ['name', 'description', 'price', 'image', 'is_active'];
+        foreach ($base_fields as $f) {
+            if (array_key_exists($f, $input)) {
+                $child_data[$f] = ($f === 'price') ? (float)$input[$f] : $input[$f];
+            }
         }
-    }
 
-    $update_data['updated_at'] = date('Y-m-d H:i:s');
+        $specs = [
+            'cpus'         => ['socket', 'cores', 'threads', 'frequency', 'tdp', 'memory_type', 'manufacturer'],
+            'motherboards' => ['socket', 'chipset', 'form_factor', 'memory_type', 'memory_slots', 'max_memory', 'm2_slots', 'sata_ports', 'pcie_version', 'wifi', 'manufacturer'],
+            'rams'         => ['type', 'capacity', 'modules', 'speed', 'cas_latency', 'rgb', 'manufacturer'],
+            'gpus'         => ['gpu_chip', 'memory_size', 'memory_type', 'tdp', 'recommended_psu', 'length', 'manufacturer', 'chip_manufacturer', 'pcie_version', 'hdmi_ports', 'displayport_ports'],
+            'storages'     => ['type', 'interface', 'capacity', 'form_factor', 'read_speed', 'write_speed', 'manufacturer'],
+            'psus'         => ['wattage', 'efficiency', 'form_factor', 'modular', 'manufacturer', 'pcie_connectors', 'sata_connectors'],
+            'cases'        => ['form_factor', 'supported_motherboards', 'color', 'window', 'max_gpu_length', 'max_cpu_cooler_height', 'drive_bays', 'fan_slots', 'radiator_support', 'manufacturer'],
+            'coolers'      => ['type', 'socket_compatibility', 'tdp', 'height', 'radiator_size', 'fan_size', 'noise_level', 'led', 'manufacturer']
+        ];
 
-    if (!empty($update_data)) {
-        $set_parts = [];
+        $allowed = $specs[$table] ?? [];
+
+        foreach ($input as $k => $v) {
+            if (in_array($k, ['id', 'category_code'], true)) continue;
+
+            $db_key = $k;
+            if ($table === 'coolers') {
+                if ($k === 'fan_diameter') { $db_key = 'fan_size'; }
+                if ($k === 'noise') { $db_key = 'noise_level'; }
+            }
+
+            if (in_array($db_key, $allowed, true)) {
+                $child_data[$db_key] = ($v === '' || $v === null) ? null : $v;
+            }
+        }
+
+        $child_data['updated_at'] = date('Y-m-d H:i:s');
+
+        $set = [];
         $params = [];
+        $res = ['window', 'order', 'group', 'key', 'index', 'type', 'value'];
 
-        foreach ($update_data as $field => $value) {
-            $escaped_field = in_array($field, $reserved_words) ? "`{$field}`" : $field;
-            $set_parts[] = "{$escaped_field} = ?";
-            $params[] = $value;
+        foreach ($child_data as $field => $val) {
+            $esc_f = in_array($field, $res, true) ? "`{$field}`" : $field;
+            $set[] = "{$esc_f} = ?";
+            $params[] = $val;
         }
 
-        $params[] = $reference_id;
-        $query = "UPDATE {$target_table} SET " . implode(', ', $set_parts) . ' WHERE id = ?';
+        $params[] = $ref_id;
+
+        $query = "UPDATE {$table} SET " . implode(', ', $set) . " WHERE id = ?";
         $db->prepare($query)->execute($params);
-    }
 
-    if (isset($input['is_active'])) {
-        $db->prepare('UPDATE components SET is_active = ?, updated_at = ? WHERE id = ?')
-           ->execute([(int) $input['is_active'], date('Y-m-d H:i:s'), $id]);
+        $db->commit();
+        send_response(true, 'Компонент обновлён', 200);
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) { $db->rollBack(); }
+        send_response(false, 'Ошибка обновления: ' . $e->getMessage(), 500);
     }
-
-    send_response(true, 'Компонент обновлён', 200);
 }
 
 function handle_delete_component(PDO $db, array $input): void
@@ -454,17 +475,49 @@ function handle_get_component(PDO $db): void
 
 function handle_update_user_role(PDO $db, array $input): void
 {
-    $user_id = (int) ($input['user_id'] ?? 0);
-    $role = trim($input['role'] ?? '');
+    $target_user_id = (int) ($input['user_id'] ?? 0);
+    $new_role = $input['role'] ?? '';
+    $current_user_id = (int) ($_SESSION['user_id'] ?? 0);
+    $current_user_role = $_SESSION['role'] ?? '';
 
-    if (!$user_id || empty($role)) {
-        send_response(false, 'Не все данные предоставлены', 400);
+    $allowed_roles = ['user', 'admin', 'sadmin'];
+    if (!in_array($new_role, $allowed_roles, true)) {
+        send_response(false, 'Недопустимая роль', 400);
     }
 
-    $db->prepare('UPDATE users SET role = :role WHERE id = :id')
-       ->execute([':role' => $role, ':id' => $user_id]);
+    if ($target_user_id === $current_user_id) {
+        send_response(false, 'Нельзя менять роль самому себе', 400);
+    }
 
-    send_response(true, 'Роль обновлена', 200);
+    $stmt = $db->prepare("SELECT role FROM users WHERE id = :id LIMIT 1");
+    $stmt->execute([':id' => $target_user_id]);
+    $target_user = $stmt->fetch();
+    
+    if (!$target_user) {
+        send_response(false, 'Пользователь не найден', 404);
+    }
+
+    $target_role = $target_user['role'];
+
+    if ($current_user_role === 'admin') {
+        if ($target_role === 'sadmin') {
+            send_response(false, 'Нельзя изменять роль супер-администратора', 403);
+        }
+        
+        if ($target_role === 'admin') {
+            send_response(false, 'Нельзя изменять роль другого администратора', 403);
+        }
+        
+        if ($new_role === 'sadmin') {
+            send_response(false, 'Нельзя назначить супер-администратора', 403);
+        }
+    }
+    
+
+    $stmt = $db->prepare("UPDATE users SET role = :role WHERE id = :id");
+    $stmt->execute([':role' => $new_role, ':id' => $target_user_id]);
+
+    send_response(true, 'Роль успешно обновлена', 200);
 }
 
 function handle_delete_user(PDO $db, array $input): void
@@ -474,11 +527,30 @@ function handle_delete_user(PDO $db, array $input): void
         send_response(false, 'ID не указан', 400);
     }
 
-    $stmt = $db->prepare("DELETE FROM users WHERE id = :id AND role != 'admin'");
+    $current_user_id = (int) ($_SESSION['user_id'] ?? 0);
+    $current_user_role = $_SESSION['role'] ?? '';
+
+    if ($current_user_role !== 'sadmin') {
+        send_response(false, 'Только супер-администратор может удалять пользователей', 403);
+    }
+
+    if ($id === $current_user_id) {
+        send_response(false, 'Нельзя удалить самого себя', 400);
+    }
+
+    $stmt = $db->prepare("SELECT role FROM users WHERE id = :id LIMIT 1");
+    $stmt->execute([':id' => $id]);
+    $target_user = $stmt->fetch();
+
+    if (!$target_user) {
+        send_response(false, 'Пользователь не найден', 404);
+    }
+
+    $stmt = $db->prepare("DELETE FROM users WHERE id = :id");
     $stmt->execute([':id' => $id]);
 
     if ($stmt->rowCount() === 0) {
-        send_response(false, 'Нельзя удалить администратора или пользователь не найден', 400);
+        send_response(false, 'Пользователь не найден', 404);
     }
 
     send_response(true, 'Пользователь удалён', 200);

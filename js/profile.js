@@ -119,6 +119,13 @@ const ProfilePage = (() => {
                             <div class="settings-dropdown-container">
                                 <button class="btn-settings" data-id="${build.id}">...</button>
                                 <div class="settings-dropdown hidden" id="dropdown-${build.id}">
+                                    <div class="dropdown-item">
+                                        <label class="dropdown-label">Тип сборки:</label>
+                                        <select class="build-type-select" data-id="${build.id}">
+                                            <option value="gaming" ${(build.build_type || 'gaming') === 'gaming' ? 'selected' : ''}>Игровой</option>
+                                            <option value="office" ${(build.build_type || 'gaming') === 'office' ? 'selected' : ''}>Офисный</option>
+                                        </select>
+                                    </div>
                                     <label class="dropdown-item">
                                         <input type="checkbox" class="public-checkbox" data-id="${build.id}" ${build.is_public == '1' ? 'checked' : ''}>
                                         <span>Сделать публичной</span>
@@ -303,6 +310,32 @@ const ProfilePage = (() => {
                 }
                 cb.style.opacity = '1';
                 cb.disabled = false;
+            });
+        });
+
+        document.querySelectorAll('.build-type-select').forEach(select => {
+            select.addEventListener('change', async () => {
+                const id = select.dataset.id;
+                const buildType = select.value;
+                select.style.opacity = '0.5';
+                select.disabled = true;
+                try {
+                    const res = await fetch('api/builds.php?action=update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id, build_type: buildType })
+                    });
+                    const data = await res.json();
+                    if (!data.success) {
+                        const build = builds.find(b => b.id == id);
+                        if (build) select.value = build.build_type || 'gaming';
+                    }
+                } catch (e) {
+                    const build = builds.find(b => b.id == id);
+                    if (build) select.value = build.build_type || 'gaming';
+                }
+                select.style.opacity = '1';
+                select.disabled = false;
             });
         });
 

@@ -5,11 +5,13 @@ const ModalManager = (() => {
     let _config = null;
     let _type = null;
     let _filters = {};
+    let _previous_filters = {}; 
     let _page = 1;
     const _per_page = 5;
+    let _all_components = []; 
 
     const TYPE_NAMES = Object.freeze({
-        cpus: 'процессор', motherboards: 'материнскую плату', rams: 'оперативную память',
+        cpus: 'процессор', motherboards: 'материную плату', rams: 'оперативную память',
         gpus: 'видеокарту', storages: 'накопитель', psus: 'блок питания',
         cases: 'корпус', coolers: 'охлаждение'
     });
@@ -51,21 +53,17 @@ const ModalManager = (() => {
         if (modal) modal.classList.add('hidden');
         _type = null;
         _filters = {};
+        _previous_filters = {};
         _page = 1;
+        _all_components = []; 
     };
 
     const _show = (type, filters = {}) => {
         _type = type;
-        _filters = {};
+        _filters = { ...filters }; 
+        _previous_filters = {};
         _page = 1;
-
-        if (type === 'psus' && filters.min_wattage) {
-            _filters.min_wattage = filters.min_wattage;
-        }
-        
-        if (type === 'motherboards' && filters.socket) {
-            _filters.socket = filters.socket;
-        }
+        _all_components = []; 
 
         const modal = document.getElementById('component-modal');
         if (!modal) return;
@@ -80,32 +78,79 @@ const ModalManager = (() => {
         _load_page(1);
     };
 
-    const _load_page = async (page) => {
-        try {
-            const page_data = await _data.getComponentsPage(_type, page, _filters);
+    const _fetch_all_components = async (type, filters) => {
+        let result_list = [];
+        let current_p = 1;
+        let total_p = 1;
+
+        do {
+            const page_data = await _data.getComponentsPage(type, current_p, filters, 1000);
             let components = [];
+
             if (page_data?.components) components = page_data.components;
             else if (Array.isArray(page_data)) components = page_data;
 
-            if (components.length === 0 && Object.keys(_filters).length > 0) {
-                const no_filter_data = await _data.getComponentsPage(_type, page, {});
-                if (no_filter_data?.components) components = no_filter_data.components;
-                else if (Array.isArray(no_filter_data)) components = no_filter_data;
+            if (!components || components.length === 0) break;
+
+            result_list = result_list.concat(components);
+            total_p = page_data?.totalPages || page_data?.total_pages || 1;
+            current_p++;
+        } while (current_p <= total_p && current_p <= 50); 
+
+        return result_list;
+    };
+
+    const _load_page = async (page) => {
+        try {
+            // выполняем сетевой запрос только если массив еще не собран (первая страница или сброс фильтров)
+            if (page === 1 || _all_components.length === 0) {
+                const body = document.getElementById('modal-body');
+                if (body && _all_components.length === 0) {
+                    body.innerHTML = '<div class="modal-loading"><div class="spinner"></div><p>Загрузка компонентов...</p></div>';
+                }
+
+                let components = await _fetch_all_components(_type, _filters);
+
+                // если из-за строгих фильтров ничего не найдено, берем полный список без фильтров
+                if (components.length === 0 && Object.keys(_filters).length > 0) {
+                    components = await _fetch_all_components(_type, {});
+                }
+
+                // просчет совместимости 
+                components = components.map(c => ({
+                    ...c,
+                    compatible: _check_one(c, _type)
+                }));
+
+                // если активны фильтры совместимости — скрываем несовместимые
+                const has_compat_filters = Object.keys(_filters).some(key => key !== 'search');
+                if (has_compat_filters) {
+                    components = components.filter(c => c.compatible);
+                }
+
+                _all_components = components;
             }
 
-            if (components.length > _per_page) components = components.slice(0, _per_page);
+            _page = page;
+            const total_items = _all_components.length;
+            const total_pages = Math.ceil(total_items / _per_page) || 1;
 
-            components = components.map(c => ({
-                ...c,
-                compatible: _check_one(c, _type)
-            }));
+            // защита от выхода за границы индексов страниц
+            if (_page > total_pages) _page = total_pages;
+            if (_page < 1) _page = 1;
 
-            _render(components, {
-                current: page_data?.currentPage || page,
-                total: page_data?.totalPages || Math.ceil(components.length / _per_page) || 1,
-                items: page_data?.totalItems || components.length,
-                next: page_data?.hasNext || (page < (page_data?.totalPages || 1)),
-                prev: page_data?.hasPrev || (page > 1)
+            // срез массива под текущую страницу (клиентская пагинация)
+            const start = (_page - 1) * _per_page;
+            const end = start + _per_page;
+            const paginated_components = _all_components.slice(start, end);
+
+            // рендер страницы
+            _render(paginated_components, {
+                current: _page,
+                total: total_pages,
+                items: total_items,
+                next: _page < total_pages,
+                prev: _page > 1
             });
         } catch (e) {
             const body = document.getElementById('modal-body');
@@ -121,37 +166,80 @@ const ModalManager = (() => {
         const build = _config.build;
         const storages = build.storages || [];
 
-        if (type === 'motherboards' && build?.cpus) {
-            if (data.socket && data.socket.toUpperCase() !== build.cpus.socket.toUpperCase()) return false;
-            
-            if (data.memory_type && build.cpus.memory_type) {
-                const mb_type = data.memory_type.toUpperCase();
-                const cpu_type = build.cpus.memory_type.toUpperCase();
-                if (!cpu_type.includes(mb_type) && !mb_type.includes(cpu_type)) return false;
+        const data_mem = (data.type || data.memory_type || '').toUpperCase();
+        const data_is_ddr4 = data_mem.includes('DDR4');
+        const data_is_ddr5 = data_mem.includes('DDR5');
+        const data_is_hybrid = data_mem.includes('DDR4/DDR5') || (data_is_ddr4 && data_is_ddr5);
+
+        if (type === 'motherboards') {
+            if (build?.cpus) {
+                const mb_socket = (data.socket || '').toUpperCase();
+                const cpu_socket = (build.cpus.socket || '').toUpperCase();
+                if (mb_socket && cpu_socket && !mb_socket.includes(cpu_socket) && !cpu_socket.includes(mb_socket)) return false;
+                
+                if (data.memory_type && build.cpus.memory_type) {
+                    const cpu_mem = build.cpus.memory_type.toUpperCase();
+                    const cpu_has_ddr4 = cpu_mem.includes('DDR4');
+                    const cpu_has_ddr5 = cpu_mem.includes('DDR5');
+
+                    if (data_is_hybrid) {
+                        if (!cpu_has_ddr4 && !cpu_has_ddr5) return false;
+                    } else {
+                        if (data_is_ddr4 && !cpu_has_ddr4) return false;
+                        if (data_is_ddr5 && !cpu_has_ddr5) return false;
+                    }
+                }
             }
             
-            if (build.rams) {
-                const mb_type = (data.memory_type || '').toUpperCase();
-                const ram_type = (build.rams.type || build.rams.memory_type || '').toUpperCase();
-                if (mb_type && ram_type && ((mb_type.includes('DDR4') && ram_type.includes('DDR5')) || (mb_type.includes('DDR5') && ram_type.includes('DDR4')))) return false;
+            if (build?.rams) {
+                const ram_mem = (build.rams.type || build.rams.memory_type || '').toUpperCase();
+                const ram_has_ddr4 = ram_mem.includes('DDR4');
+                const ram_has_ddr5 = ram_mem.includes('DDR5');
+
+                if (data_is_hybrid) {
+                    if (!ram_has_ddr4 && !ram_has_ddr5) return false;
+                } else {
+                    if (data_is_ddr4 && !ram_has_ddr4) return false;
+                    if (data_is_ddr5 && !ram_has_ddr5) return false;
+                }
             }
         }
 
-        if (type === 'cpus' && build?.motherboards?.socket && data.socket) {
-            if (data.socket.toUpperCase() !== build.motherboards.socket.toUpperCase()) return false;
+        if (type === 'cpus') {
+            if (build?.motherboards?.socket && data.socket) {
+                const cpu_socket = (data.socket || '').toUpperCase();
+                const mb_socket = (build.motherboards.socket || '').toUpperCase();
+                if (cpu_socket && mb_socket && !cpu_socket.includes(mb_socket) && !mb_socket.includes(cpu_socket)) return false;
+            }
+            if (build?.rams) {
+                const ram_mem = (build.rams.type || build.rams.memory_type || '').toUpperCase();
+                if (ram_mem.includes('DDR4') && !data_is_ddr4) return false;
+                if (ram_mem.includes('DDR5') && !data_is_ddr5) return false;
+            }
         }
 
         if (type === 'rams') {
-            const ram_type = (data.type || data.memory_type || '').toUpperCase();
-            
             if (build?.cpus?.memory_type) {
-                const cpu_types = build.cpus.memory_type.toUpperCase();
-                if (ram_type && !cpu_types.includes(ram_type)) return false;
+                const cpu_mem = build.cpus.memory_type.toUpperCase();
+                const cpu_has_ddr4 = cpu_mem.includes('DDR4');
+                const cpu_has_ddr5 = cpu_mem.includes('DDR5');
+
+                if (data_is_ddr4 && !cpu_has_ddr4) return false;
+                if (data_is_ddr5 && !cpu_has_ddr5) return false;
             }
 
             if (build?.motherboards?.memory_type) {
-                const mb_type = build.motherboards.memory_type.toUpperCase();
-                if (ram_type && ((mb_type.includes('DDR4') && ram_type.includes('DDR5')) || (mb_type.includes('DDR5') && ram_type.includes('DDR4')))) return false;
+                const mb_mem = build.motherboards.memory_type.toUpperCase();
+                const mb_has_ddr4 = mb_mem.includes('DDR4');
+                const mb_has_ddr5 = mb_mem.includes('DDR5');
+                const mb_is_hybrid = mb_mem.includes('DDR4/DDR5') || (mb_has_ddr4 && mb_has_ddr5);
+
+                if (mb_is_hybrid) {
+                    if (!data_is_ddr4 && !data_is_ddr5) return false;
+                } else {
+                    if (data_is_ddr4 && !mb_has_ddr4) return false;
+                    if (data_is_ddr5 && !mb_has_ddr5) return false;
+                }
                 
                 const mb_slots = build.motherboards.memory_slots || 4;
                 if (mb_slots && data.modules && parseInt(data.modules) > mb_slots) return false;
@@ -159,27 +247,52 @@ const ModalManager = (() => {
         }
 
         if (type === 'storages' && build?.motherboards) {
-            const is_m2 = (s) => {
-                const type = (s.type || '').toUpperCase();
-                const formFactor = (s.form_factor || '').toUpperCase();
-                const iface = (s.interface || '').toUpperCase();
-                return type.includes('NVME') || formFactor.includes('M.2') || iface.includes('M.2') || iface.includes('PCI-E');
+            const is_nvme_m2 = (s) => {
+                const s_type = (s.type || '').toUpperCase();
+                const s_iface = (s.interface || '').toUpperCase();
+                const s_ff = (s.form_factor || '').toUpperCase();
+                return s_type.includes('NVME') || s_iface.includes('PCI-E') || (s_ff.includes('M.2') && !s_iface.includes('SATA')) || (s_iface.includes('M.2') && !s_iface.includes('SATA'));
             };
-            if (is_m2(data)) {
-                const existing_m2 = storages.filter(s => is_m2(s)).length;
-                const m2_slots = build.motherboards.m2_slots || 1;
-                if (existing_m2 >= m2_slots) return false;
+
+            const mb_m2_slots = parseInt(build.motherboards.m2_slots) || 0;
+            const mb_sata_ports = parseInt(build.motherboards.sata_ports) || 4;
+
+            const existing_nvme = storages.filter(s => is_nvme_m2(s)).length;
+            const existing_sata = storages.filter(s => !is_nvme_m2(s)).length;
+
+            if (is_nvme_m2(data)) {
+                if (existing_nvme >= mb_m2_slots) return false;
             } else {
-                const existing_sata = storages.filter(s => !is_m2(s)).length;
-                const sata_ports = build.motherboards.sata_ports || 4;
-                if (existing_sata  >= sata_ports) return false;
+                if (existing_sata >= mb_sata_ports) return false;
             }
         }
 
-        if (type === 'coolers' && build?.cpus?.socket && data.socket_compatibility) {
-            const sockets = data.socket_compatibility.toUpperCase().split(/[,|]/).map(s => s.trim());
-            if (!sockets.includes(build.cpus.socket.toUpperCase())) return false;
-            if (build.cpus.tdp && data.tdp && parseInt(data.tdp) < parseInt(build.cpus.tdp)) return false;
+        if (type === 'coolers') {
+            if (build?.cpus) {
+                if (data.socket_compatibility && build.cpus.socket) {
+                    const cpu_socket = String(build.cpus.socket || '').toUpperCase();
+                    const sockets = String(data.socket_compatibility || '').toUpperCase().split(/[,|]/).map(s => s.trim());
+                    const hasMatch = sockets.some(s => s.includes(cpu_socket) || cpu_socket.includes(s));
+                    if (!hasMatch) return false;
+                }
+                if (build.cpus.tdp && data.tdp && parseInt(data.tdp) < parseInt(build.cpus.tdp)) return false;
+            }
+
+            const cooler_type = String(data.type || '').toUpperCase();
+            const extractNumbers = (str) => (String(str || '').match(/\d+/g) || []);
+
+            if (cooler_type === 'AIO') {
+                if (build?.cases) {
+                    const supported_nums = extractNumbers(build.cases.radiator_support);
+                    const rad_nums = extractNumbers(data.radiator_size);
+                    const isSupported = rad_nums.length > 0 && rad_nums.every(num => supported_nums.includes(num));
+                    if (rad_nums.length > 0 && !isSupported) return false;
+                }
+            } else {
+                const cooler_height = parseInt(data.height) || 0;
+                const max_height = parseInt(build?.cases?.max_cpu_cooler_height) || 0;
+                if (cooler_height && max_height && cooler_height > max_height) return false;
+            }
         }
 
         if (type === 'cases' && build?.motherboards?.form_factor && data.supported_motherboards) {
@@ -204,10 +317,11 @@ const ModalManager = (() => {
         if (!body) return;
 
         const type_name = TYPE_NAMES[_type] || _type;
+        const current_search_value = _filters.search || ''; 
 
         let html = `<div class="components-modal-content">
             <div class="components-search">
-                <input type="text" id="modal-search-input" placeholder="Поиск ${type_name}..." class="search-input">
+                <input type="text" id="modal-search-input" value="${current_search_value}" placeholder="Поиск ${type_name}..." class="search-input">
                 <button onclick="ModalManager.search()" class="btn-search">Найти</button>
             </div>
             <div class="components-list-info">Найдено: ${page_data.items} компонентов</div>
@@ -220,8 +334,12 @@ const ModalManager = (() => {
         }
 
         const has_filters = Object.keys(_filters).length > 0 && !(Object.keys(_filters).length === 1 && _filters.search);
+        const has_backup = Object.keys(_previous_filters).length > 0;
+
         if (has_filters) {
             html += `<div class="filter-clear-section"><button class="btn-clear-filters" onclick="ModalManager.clearFilters()"><span class="clear-icon">&times;</span> Очистить фильтры</button></div>`;
+        } else if (has_backup) {
+            html += `<div class="filter-clear-section"><button class="btn-clear-filters" onclick="ModalManager.restoreFilters()"><span class="clear-icon">&#x21BB;</span> Вернуть фильтры</button></div>`;
         }
 
         html += '</div>';
@@ -302,10 +420,24 @@ const ModalManager = (() => {
         if (!input) return;
         const q = input.value.trim();
         if (q) _filters.search = q; else delete _filters.search;
+        _previous_filters = {}; 
+        _all_components = []; 
         _load_page(1);
     };
 
-    const _clear = () => { _filters = {}; _load_page(1); };
+    const _clear = () => { 
+        _previous_filters = { ..._filters }; 
+        _filters = {}; 
+        _all_components = []; 
+        _load_page(1); 
+    };
+
+    const _restore = () => {
+        _filters = { ..._previous_filters }; 
+        _previous_filters = {}; 
+        _all_components = []; 
+        _load_page(1);
+    };
 
     const _select = async (id, type) => {
         const actual_type = type || _type;
@@ -318,7 +450,7 @@ const ModalManager = (() => {
             if (!c.category) c.category = actual_type.replace(/s$/, '');
             _hide();
             setTimeout(() => { if (_config?.selectComponent) _config.selectComponent(actual_type, c); }, 100);
-        } catch (e) { alert(`Ошибка выбора: ${e.message}`); }
+        } catch (e) {  }
     };
 
     const _init = (data_manager, configurator) => {
@@ -335,8 +467,9 @@ const ModalManager = (() => {
         select: _select,
         prev: () => { if (_page > 1) _load_page(_page - 1); },
         next: () => _load_page(_page + 1),
-        retry: () => _load_page(_page),
-        clearFilters: _clear
+        retry: () => { _all_components = []; _load_page(_page); }, 
+        clearFilters: _clear,
+        restoreFilters: _restore
     });
 })();
 
