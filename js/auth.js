@@ -283,10 +283,8 @@ const AuthManager = (() => {
             });
         }
 
-        // ИСПРАВЛЕННАЯ ЧАСТЬ - используем делегирование или пересоздаём обработчик
         const loginLink = document.getElementById('login-link');
         if (loginLink) {
-            // Удаляем старые обработчики
             const newLoginLink = loginLink.cloneNode(true);
             loginLink.parentNode.replaceChild(newLoginLink, loginLink);
             newLoginLink.addEventListener('click', (e) => {
@@ -295,10 +293,8 @@ const AuthManager = (() => {
             });
         }
 
-        // Добавляем обработчик для logout-link
         const logoutLink = document.getElementById('logout-link');
         if (logoutLink) {
-            // Удаляем старые обработчики
             const newLogoutLink = logoutLink.cloneNode(true);
             logoutLink.parentNode.replaceChild(newLogoutLink, logoutLink);
             newLogoutLink.addEventListener('click', (e) => {

@@ -383,84 +383,110 @@ function handle_toggle_component(PDO $db, array $input): void
 
 function handle_get_component(PDO $db): void
 {
-    $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+    $all_detail_tables = ['cpus', 'motherboards', 'rams', 'gpus', 'storages', 'psus', 'cases', 'coolers'];
 
+    $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
     if ($id) {
         $stmt = $db->prepare(
-            "SELECT c.id, c.category_id, c.reference_id, c.reference_table, c.is_active,
-                    cat.name AS category_name, cat.code AS category_code
+            "SELECT c.*, cat.name AS category_name, cat.code AS category_code
              FROM components c
              INNER JOIN component_categories cat ON c.category_id = cat.id
              WHERE c.id = :id LIMIT 1"
         );
         $stmt->execute([':id' => $id]);
-        $comp = $stmt->fetch();
+        $comp = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$comp) {
             send_response(false, 'Компонент не найден', 404);
         }
 
-        $detail = $db->prepare("SELECT * FROM {$comp['reference_table']} WHERE id = :ref_id LIMIT 1");
-        $detail->execute([':ref_id' => $comp['reference_id']]);
-        $details = $detail->fetch();
-
-        if ($details) {
-            $main_id = $comp['id'];
-            foreach ($details as $key => $value) {
-                if ($key !== 'id') $comp[$key] = $value;
+        if (in_array($comp['reference_table'], $all_detail_tables)) {
+            $detail = $db->prepare("SELECT * FROM {$comp['reference_table']} WHERE id = :ref_id LIMIT 1");
+            $detail->execute([':ref_id' => $comp['reference_id']]);
+            $details = $detail->fetch(PDO::FETCH_ASSOC);
+            if ($details) {
+                $main_id = $comp['id'];
+                $comp = array_merge($comp, $details);
+                $comp['id'] = $main_id;
             }
-            $comp['id'] = $main_id;
         }
-
         send_response(true, '', 200, ['component' => $comp]);
+        return; 
     }
 
     $page = (int) (filter_input(INPUT_GET, 'page', FILTER_VALIDATE_INT) ?: 1);
     $limit = (int) (filter_input(INPUT_GET, 'limit', FILTER_VALIDATE_INT) ?: 10);
     $category = filter_input(INPUT_GET, 'category', FILTER_SANITIZE_SPECIAL_CHARS);
-    $is_active = filter_input(INPUT_GET, 'is_active', FILTER_VALIDATE_INT);
     $search = filter_input(INPUT_GET, 'search', FILTER_SANITIZE_SPECIAL_CHARS);
-    $sort_by = filter_input(INPUT_GET, 'sort_by', FILTER_SANITIZE_SPECIAL_CHARS) ?? 'created_at';
-    $sort_order = filter_input(INPUT_GET, 'sort_order', FILTER_SANITIZE_SPECIAL_CHARS) ?? 'desc';
+    
+    $sort_by = filter_input(INPUT_GET, 'sort_by', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'created_at';
+    $sort_order = strtolower(filter_input(INPUT_GET, 'sort_order', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'desc');
+    if (!in_array($sort_order, ['asc', 'desc'])) $sort_order = 'desc';
 
     $offset = ($page - 1) * $limit;
     $where = ' WHERE 1=1';
     $params = [];
 
+    $join_query = "";
+    $name_cols = [];
+    $price_cols = [];
+    foreach ($all_detail_tables as $tbl) {
+        $join_query .= " LEFT JOIN {$tbl} t_{$tbl} ON c.reference_id = t_{$tbl}.id AND c.reference_table = '{$tbl}' ";
+        $name_cols[] = "t_{$tbl}.name";
+        $price_cols[] = "t_{$tbl}.price";
+    }
+    $name_coalesce = "COALESCE(" . implode(", ", $name_cols) . ")";
+    $price_coalesce = "COALESCE(" . implode(", ", $price_cols) . ")";
+
     if ($category && $category !== 'all') {
-        $where .= ' AND cat.code = :category';
-        $params[':category'] = $category;
+        if (is_numeric($category)) {
+            $where .= ' AND c.category_id = :category_id';
+            $params[':category_id'] = (int)$category;
+        } else {
+            $where .= ' AND cat.code = :category';
+            $params[':category'] = $category;
+        }
     }
 
-    if ($is_active !== null && $is_active !== '') {
+    if (isset($_GET['is_active']) && $_GET['is_active'] !== 'all' && $_GET['is_active'] !== '') {
         $where .= ' AND c.is_active = :is_active';
-        $params[':is_active'] = (int) $is_active;
+        $params[':is_active'] = (int) $_GET['is_active'];
     }
 
-    if ($search && $search !== '') {
-        $where .= ' AND EXISTS (
-            SELECT 1 FROM cpus ref WHERE ref.id = c.reference_id AND ref.name LIKE :search
-        )';
+
+    if (!empty($search)) {
+        $where .= " AND {$name_coalesce} LIKE :search";
         $params[':search'] = '%' . $search . '%';
     }
 
-    $count_stmt = $db->prepare(
-        "SELECT COUNT(*) FROM components c
-         INNER JOIN component_categories cat ON c.category_id = cat.id" . $where
-    );
+
+    $order_col = "c.created_at"; 
+    if ($sort_by === 'price') {
+        $order_col = $price_coalesce;
+    } elseif ($sort_by === 'name') {
+        $order_col = $name_coalesce;
+    } elseif ($sort_by === 'id') {
+        $order_col = "c.id";
+    }
+
+    $count_sql = "SELECT COUNT(c.id) FROM components c 
+                  INNER JOIN component_categories cat ON c.category_id = cat.id 
+                  {$join_query} {$where}";
+    $count_stmt = $db->prepare($count_sql);
     $count_stmt->execute($params);
     $total = (int) $count_stmt->fetchColumn();
 
     $query = "SELECT c.*, cat.name AS category_name, cat.code AS category_code
               FROM components c
               INNER JOIN component_categories cat ON c.category_id = cat.id
+              {$join_query}
               {$where}
-              ORDER BY c.{$sort_by} {$sort_order}
+              ORDER BY {$order_col} {$sort_order}
               LIMIT {$limit} OFFSET {$offset}";
 
     $stmt = $db->prepare($query);
     $stmt->execute($params);
-    $components = $stmt->fetchAll();
+    $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     send_response(true, '', 200, [
         'components' => $components,

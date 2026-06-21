@@ -166,7 +166,7 @@ function handle_restore_session(PDO $db, array $input): void
     $username = trim($input['username'] ?? '');
 
     if (!$user_id || empty($username)) {
-        send_response(false, 'Недостаточно данных', 400);
+        send_response(false, 'пользователя нету', 400);
     }
 
     $stmt = $db->prepare(

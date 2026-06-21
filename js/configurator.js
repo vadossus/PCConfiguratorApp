@@ -164,18 +164,19 @@ const Configurator = (() => {
     };
 
     const _get_specs = (component) => {
-        if (!component) return 'Характеристики не указаны';
+        if (!component) return 'Нету характеристики';
         
         const fields = [
             { key: 'socket', label: 'Сокет' },
+            { key: 'cores', label: 'Ядер' },              
+            { key: 'frequency', label: 'Частота' }, 
+            { key: 'tdp', label: 'TDP', suffix: 'W' },      
             { key: 'memory_type', label: 'Память' },
             { key: 'type', label: 'Тип' },
             { key: 'capacity', label: 'Объем', suffix: ' ГБ' },
-            { key: 'speed', label: 'Частота', suffix: ' МГц' },
+            { key: 'speed', label: 'Частота памяти', suffix: ' МГц' }, 
             { key: 'wattage', label: 'Мощность', suffix: 'W' },
             { key: 'form_factor', label: 'Форм-фактор' },
-            { key: 'tdp', label: 'TDP', suffix: 'W' },
-            { key: 'cores', label: 'Ядер' },
             { key: 'chipset', label: 'Чипсет' },
             { key: 'memory_size', label: 'Память', suffix: ' ГБ' },
             { key: 'supported_motherboards', label: 'Поддержка:' },
@@ -186,7 +187,6 @@ const Configurator = (() => {
             { key: 'interface', label: 'Интерфейс' },
             { key: 'read_speed', label: 'Чтение', suffix: ' МБ/с' },
             { key: 'write_speed', label: 'Запись', suffix: ' МБ/с' },
-            { key: 'frequency', label: 'Частота' },
             { key: 'socket_compatibility', label: 'Совместимость' }
         ];
         

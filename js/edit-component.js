@@ -41,14 +41,14 @@ const EditComponent = (() => {
             { name: 'manufacturer', label: 'Производитель', type: 'select', options: ['Kingston', 'Corsair', 'G.Skill', 'Crucial', 'Adata', 'Patriot'] }
         ],
         gpus: [
-            { name: 'gpu_chip', label: 'Чип', type: 'text' },
+            { name: 'gpu_chip', label: 'Чип (видеокарты)', type: 'text' },
             { name: 'memory_size', label: 'Память (ГБ)', type: 'number', min: 2 },
-            { name: 'memory_type', label: 'Тип памяти', type: 'select', options: ['GDDR5', 'GDDR6', 'GDDR6X', 'GDDR7', 'GDDR7X'] },
+            { name: 'memory_type', label: 'Тип памяти', type: 'select', options: ['GDDR3','GDDR5', 'GDDR6', 'GDDR6X', 'GDDR7', 'GDDR7X'] },
             { name: 'tdp', label: 'TDP (Вт)', type: 'number', min: 0 },
             { name: 'recommended_psu', label: 'Рек. БП (Вт)', type: 'number', min: 300 },
             { name: 'length', label: 'Длина (мм)', type: 'number', min: 150 },
             { name: 'manufacturer', label: 'Производитель', type: 'select', options: ['ASUS', 'MSI', 'Gigabyte', 'EVGA', 'Palit'] },
-            { name: 'chip_manufacturer', label: 'Чип', type: 'select', options: ['NVIDIA', 'AMD'] }
+            { name: 'chip_manufacturer', label: 'Производитель чипа', type: 'select', options: ['NVIDIA', 'AMD'] }
         ],
         storages: [
             { name: 'type', label: 'Тип', type: 'select', options: ['HDD', 'SSD', 'NVMe'] },
@@ -207,7 +207,6 @@ const EditComponent = (() => {
         if (comp_id) comp_id.value = _data.id || '';
     };
 
-    // заполнение полей данными
     const _fill_form = () => {
         const name = document.getElementById('name');
         const desc = document.getElementById('description');
@@ -231,7 +230,6 @@ const EditComponent = (() => {
         }
     };
 
-    // добавление полей с левой и правой стороны
     const _add_spec_fields = () => {
         const cat = _data.category_code || _cat;
         if (!cat) return;
@@ -244,7 +242,7 @@ const EditComponent = (() => {
         const photo_column = document.querySelector('.photo-column');
         const dynamic_fields = document.getElementById('dynamic-fields');
         
-        // 1. Сначала генерируем и вставляем HTML для левой колонки
+
         if (photo_column && left.length > 0) {
             const existing = photo_column.querySelector('.spec-fields-left');
             if (existing) existing.remove();
@@ -263,7 +261,6 @@ const EditComponent = (() => {
             }
         }
         
-        // 2. Генерируем и вставляем HTML для правой колонки
         if (dynamic_fields) {
             if (right.length > 0) {
                 let html = '';
@@ -279,9 +276,7 @@ const EditComponent = (() => {
             }
         }
         
-        // 3. ТЕПЕРЬ, КОГДА ВСЕ ПОЛЯ ТОЧНО ЕСТЬ В DOM, заполняем их данными
         all.forEach(f => {
-            // Ищем элемент по имени во всем документе (и слева, и справа)
             const input = document.querySelector(`[name="${f.name}"]`);
             if (!input || !_data) return;
 
@@ -289,10 +284,8 @@ const EditComponent = (() => {
             if (db_val === undefined || db_val === null) return;
 
             if (f.type === 'checkbox') {
-                // Приводим к boolean (работает и для true/false, и для 1/0 из БД)
                 input.checked = Boolean(parseInt(db_val) || db_val === true || db_val === '1');
             } else if (f.type === 'select_checkbox') {
-                // Обработка кастомного мультиселекта
                 const container = input.closest('.dropdown-multi');
                 if (container) {
                     const selected_values = db_val.toString().split(',').map(v => v.trim()).filter(Boolean);
@@ -308,19 +301,19 @@ const EditComponent = (() => {
                     input.value = selected_values.join(', ');
                 }
             } else if (f.type === 'select') {
-                // Проверяем существование опции перед подстановкой (чтобы избежать падения из-за типов данных)
+                // существование опции перед подстановкой 
                 const optionExists = Array.from(input.options).some(opt => opt.value == db_val);
                 if (optionExists) {
                     input.value = db_val;
                 }
             } else {
-                // Обычные текстовые и числовые поля
+                // обычные текстовые и числовые поля
                 input.value = db_val;
             }
         });
     };
     
-    // Функция генерирует чистый пустой шаблон поля, данные подставятся позже
+    // генерирация пустого шаблона поля, данные подставятся позже
     const _make_field = (field, half = false) => {
         const cls = half ? 'form-group half' : 'form-group';
 
@@ -430,6 +423,21 @@ const EditComponent = (() => {
             }
         }
 
+        document.addEventListener('focus', (e) => {
+            if (e.target.name === 'frequency') {
+                e.target.value = e.target.value.replace(' ГГц', '');
+            }
+        }, true);
+
+        document.addEventListener('blur', (e) => {
+            if (e.target.name === 'frequency') {
+                let val = e.target.value.replace(/[^0-9.]/g, '');
+                if (val !== '') {
+                    e.target.value = val + ' ГГц';
+                }
+            }
+        }, true);
+
         image_input?.addEventListener('input', () => {
             const url = image_input.value.trim();
             if (url && preview) {
@@ -524,7 +532,7 @@ const EditComponent = (() => {
         }
         
         const priceNum = parseFloat(price);
-        if (isNaN(priceNum) || priceNum < 0) {
+        if (isNaN(priceNum) || priceNum <= 0) {
             _show_message('Цена должна быть числом больше или равным 0', 'error');
             return false;
         }
@@ -541,6 +549,15 @@ const EditComponent = (() => {
             return false;
         }
         
+        if (cat === 'cpus') {
+            const freqEl = document.querySelector('[name="frequency"]');
+            if (!freqEl || !freqEl.value.trim()) {
+                _show_message('Укажите частоту процессора', 'error');
+                freqEl?.classList.add('is-invalid');
+                return false;
+            }
+        }
+
         if (cat === 'cases') {
             const formFactor = document.querySelector('[name="form_factor"]')?.value;
             if (!formFactor) {
@@ -551,9 +568,9 @@ const EditComponent = (() => {
         
         if (cat === 'gpus') {
             const memoryType = document.querySelector('[name="memory_type"]')?.value;
-            const validTypes = ['GDDR5', 'GDDR6', 'GDDR6X', 'GDDR7', 'GDDR7X'];
+            const validTypes = ['GDDR3','GDDR5', 'GDDR6', 'GDDR6X', 'GDDR7', 'GDDR7X'];
             if (memoryType && !validTypes.includes(memoryType)) {
-                _show_message('Неверный тип памяти. Доступны: GDDR5, GDDR6, GDDR6X, GDDR7, GDDR7X', 'error');
+                _show_message('Неверный тип памяти. Доступны: GDDR3, GDDR5, GDDR6, GDDR6X, GDDR7, GDDR7X', 'error');
                 return false;
             }
         }

@@ -106,11 +106,50 @@ const AdminPanel = (() => {
 
     // биндинг фильтров сортировки поиска по элементам
     const _bind_filters = () => {
-        document.getElementById('component-type-filter')?.addEventListener('change', e => { _filters.category = e.target.value; _filters.page = 1; _load_components(); });
-        document.getElementById('component-search')?.addEventListener('input', e => { _filters.search = e.target.value; clearTimeout(_state.search_timer); _state.search_timer = setTimeout(() => { _filters.page = 1; _load_components(); }, 500); });
-        const sort = document.getElementById('component-sort');
-        if (sort) { sort.value = 'created_at-desc'; sort.addEventListener('change', e => { const [f, o] = (e.target.value || 'created_at-desc').split('-'); _filters.sort = f; _filters.order = o || 'desc'; _filters.page = 1; _load_components(); }); }
-        document.getElementById('component-status')?.addEventListener('change', e => { _filters.status = e.target.value; _filters.page = 1; _load_components(); });
+        const catFilter = document.getElementById('component-type-filter');
+        const searchInput = document.getElementById('component-search');
+        const sortFilter = document.getElementById('component-sort');
+        const statusFilter = document.getElementById('component-status');
+
+        if (catFilter) _filters.category = catFilter.value || 'all';
+        if (searchInput) _filters.search = searchInput.value || '';
+        if (statusFilter) _filters.status = statusFilter.value || 'all';
+        if (sortFilter) {
+            const val = sortFilter.value || 'created_at-desc';
+            const [f, o] = val.split('-');
+            _filters.sort = f || 'created_at';
+            _filters.order = o || 'desc';
+        }
+
+        catFilter?.addEventListener('change', e => { 
+            _filters.category = e.target.value; 
+            _filters.page = 1; 
+            _load_components(); 
+        });
+
+        searchInput?.addEventListener('input', e => { 
+            _filters.search = e.target.value; 
+            clearTimeout(_state.search_timer); 
+            _state.search_timer = setTimeout(() => { 
+                _filters.page = 1; 
+                _load_components(); 
+            }, 500); 
+        });
+
+        sortFilter?.addEventListener('change', e => { 
+            const val = e.target.value || 'created_at-desc';
+            const [f, o] = val.split('-'); 
+            _filters.sort = f || 'created_at'; 
+            _filters.order = o || 'desc'; 
+            _filters.page = 1; 
+            _load_components(); 
+        });
+
+        statusFilter?.addEventListener('change', e => { 
+            _filters.status = e.target.value; 
+            _filters.page = 1; 
+            _load_components(); 
+        });
     };
 
     const _log_action = async (type, desc = '') => {
@@ -185,8 +224,14 @@ const AdminPanel = (() => {
         return t.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     };
 
+    let _lastRequestId = 0; 
+
     const _load_components = async () => {
+        _lastRequestId++; 
+        const currentRequestId = _lastRequestId;
+        
         _show_loader('Загрузка компонентов...');
+        
         try {   
             const p = new URLSearchParams({ 
                 page: _filters.page, 
@@ -194,38 +239,56 @@ const AdminPanel = (() => {
                 sort_by: _filters.sort, 
                 sort_order: _filters.order 
             });
-            if (_filters.category !== 'all') p.append('category', _filters.category);
-            if (_filters.search.trim()) p.append('search', _filters.search.trim());
-            if (_filters.status !== 'all') p.append('is_active', _filters.status === 'active' ? '1' : '0');
+
+            if (_filters.category && _filters.category !== 'all') {
+                p.append('category', _filters.category);
+            }
+
+            if (_filters.status && _filters.status !== 'all') {
+                const isActive = (_filters.status === 'active' || _filters.status === '1') ? '1' : '0';
+                p.append('is_active', isActive);
+            }
+
+            if (_filters.search && _filters.search.trim()) {
+                p.append('search', _filters.search.trim());
+            }
             
-            const r = await fetch(`${API}get_component&${p}`);
+            const r = await fetch(`${API}get_component&${p.toString()}`);
             const d = await r.json();
             
+            if (currentRequestId !== _lastRequestId) return;
+
             if (d.success && d.components && d.components.length > 0) {
                 const full_components = await Promise.all(
                     d.components.map(async (c) => {
                         try {
                             const res = await fetch(`${API}get_component&id=${c.id}`);
                             const data = await res.json();
-                            if (data.success && data.component) {
-                                return { ...c, ...data.component };
-                            }
-                            return c;
+                            return (data.success && data.component) ? { ...c, ...data.component } : c;
                         } catch (e) {
                             return c;
                         }
                     })
                 );
+                
+                if (currentRequestId !== _lastRequestId) return;
+                
                 _list.components = full_components;
             } else {
                 _list.components = [];
             }
             
             _render_components_table(d.pagination?.total || 0);
+            
         } catch (e) { 
-            _render_components_table(0); 
+            if (currentRequestId === _lastRequestId) {
+                _render_components_table(0); 
+            }
         }
-        _hide_loader();
+        
+        if (currentRequestId === _lastRequestId) {
+            _hide_loader();
+        }
     };
 
     const _render_components_table = (total) => {
@@ -473,8 +536,10 @@ const AdminPanel = (() => {
             const tr = document.createElement('tr');
             
             const is_self = (u.id == current_user.id);
-            const can_change_role = is_sadmin && !is_self;
-            const can_delete = is_sadmin && !is_self;
+            const is_target_sadmin = (u.role === 'sadmin'); 
+            
+            const can_change_role = is_sadmin && !is_self && !is_target_sadmin;
+            const can_delete = is_sadmin && !is_self && !is_target_sadmin;
             
             let role_html = '';
             if (can_change_role) {
